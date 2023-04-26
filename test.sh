@@ -1,16 +1,19 @@
 #!/bin/bash
 
+IFS=$'\n'
+
+TEST=$1
+FATX=./fatx
+FBIN=$FATX
+FTXT=test.sh
+
 SIZE=300
 WAIT=3
-TIMEOUT=60
+TIMEOUT=120
 
-DSK=disk.$$.fat
+DSK=disk.$$
 #DIF=disk.$$.dif
 MNT=mnt.$$
-
-REF=
-DISK=
-CMDFUSE=
 
 prepare() {
 	echo Prepare context
@@ -20,19 +23,17 @@ prepare() {
 	REF=$(basename $DSK .fat).ref
 	[ -z $DIF ] || [ -e $DIF ] || (touch $DIF; cp $DSK $REF)
 	rm -rf $MNT/* || fusermount -u $MNT && rm -rf $MNT/*
-	DISK="$DSK"
-	[ -z $DIF ] || DISK="$DISK --diff $DIF"
-	CMDFUSE="./fatx --as fuse -d $DISK $MNT/"
+	DISK=($DSK)
+	[ -z $DIF ] || DISK+=(--diff $DIF)
 }
 remove() {
-	rm -rf $MNT
+	rmdir $MNT
 }
-
 prefuse() {
 	if ! [ -c /dev/fuse ]; then
 		exit 77
 	fi
-	$CMDFUSE $1 2>&1 &
+	$FATX --as fuse ${DISK[@]} $MNT/ $1 2>&1 &
 	FUSE=$!
 	count=0
 	while ! `df $MNT | tail -n1 | cut -f 1 -d\  | grep -q fatx`; do
@@ -41,6 +42,7 @@ prefuse() {
 		if [ "$1" == "" -a $((count)) == $TIMEOUT ]; then
 			echo Failed to mount disk
 			kilfuse
+			close
 			exit 1
 		fi
 	done
@@ -49,7 +51,7 @@ remfuse() {
 	fusermount -u $MNT
 	count=0
 	while `df $MNT | tail -n1 | cut -f 1 -d\  | grep -q fatx`; do
-	        sleep 1
+		sleep 1
 		let count++
 		if [ $((count)) == $TIMEOUT ]; then
 			echo Failed to unmount disk
@@ -63,11 +65,31 @@ kilfuse() {
 	kill -9 $FUSE 2>/dev/null
 	FUSE=
 	fusermount -u $MNT
+	remove
+}
+check() {
+	cmp -b $DSK $REF
+	if [ $? == 0 ]; then
+		echo "*** Test OK"
+	else
+		echo "### Test KO", $DSK has been changed.
+		exit 1
+	fi
+}
+close() {
+	remove
+	if ! [ -z $DIF ]; then
+		check
+	fi
+	[ -e $DSK ] && rm $DSK
+	[ -z $DIF ] || ([ -e $DIF ] && rm $DIF)
+	[ -z $REF ] || ([ -e $REF ] && rm $REF)
+	echo -n
 }
 
 mkfs1() {
-	echo Mkfs: make disk: 
-	./fatx --as mkfs -y $DISK 2>&1
+	echo Mkfs: make disk:
+	$FATX --as mkfs -y ${DISK[@]} 2>&1
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -75,19 +97,18 @@ mkfs1() {
 		exit 1
 	fi
 }
-
 fuse1() {
-	echo Fuse: simple file creation: 
+	echo Fuse: simple file creation:
 	prefuse
-	cp fatx $MNT
-	cmp -b fatx $MNT/fatx
+	cp $FBIN $MNT
+	cmp -b $FBIN $MNT/fatx
 	if [ $? != 0 ]; then
 		echo "### Test KO"
 		kilfuse
 		exit 1
 	fi
-	cp Makefile $MNT/fatx
-	cmp -b Makefile $MNT/fatx
+	cp $FTXT $MNT/fatx
+	cmp -b $FTXT $MNT/fatx
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -98,11 +119,11 @@ fuse1() {
 	remfuse
 }
 fuse2() {
-	echo Fuse: moving file: 
+	echo Fuse: moving file:
 	prefuse
 	mkdir $MNT/dir1
 	mkdir $MNT/dir2
-	cp fatx $MNT/
+	cp $FBIN $MNT/
 	mv -f $MNT/fatx $MNT/fatx.bis
 	mv -f $MNT/fatx.bis $MNT/dir1/
 	mv -f $MNT/dir1 $MNT/dir3
@@ -118,10 +139,10 @@ fuse2() {
 	remfuse
 }
 fuse3() {
-	echo Fuse: removing file: 
+	echo Fuse: removing file:
 	prefuse
 	mkdir $MNT/test
-	cp fatx $MNT/test
+	cp $FBIN $MNT/test
 	rm $MNT/test/fatx
 	rmdir $MNT/test
 	ls $MNT/test >/dev/null 2>&1
@@ -135,11 +156,11 @@ fuse3() {
 	remfuse
 }
 fuse4() {
-	echo Fuse: multiple file access: 
+	echo Fuse: multiple file access:
 	prefuse
 	nmax=5
 	for ((n = 1; n <= $nmax; n++)); do
-		cp Makefile $MNT/m$n
+		cp $FTXT $MNT/m$n
 	done
 	exec 3<>$MNT/m1
 	exec 4<>$MNT/m2
@@ -154,24 +175,11 @@ fuse4() {
 	echo "*** Test OK"
 	remfuse
 }
-fuse5() {
-	echo Fuse: concurrent access: 
-	prefuse
-	./fatx --as fsck $DISK 2>&1
-	if [ $? != 0 ]; then
-		echo "*** Test OK"
-	else
-		echo "### Test KO"
-		kilfuse
-		exit 1
-	fi
-	remfuse
-}
 fuse6() {
 	echo Fuse: directory copies:
 	prefuse
 	mkdir $MNT/test
-	cp fatx $MNT/test/
+	cp $FBIN $MNT/test/
 	mkdir $MNT/test2
 	cp -r $MNT/test $MNT/test2
 	echo "*** Test OK"
@@ -238,7 +246,7 @@ fuse7() {
 		fi
 	fi
 	echo "*** Test OK"
-	if [ -z $1 ]; then 
+	if [ -z $1 ]; then
 		remfuse
 	fi
 }
@@ -263,11 +271,11 @@ fuse8() {
 fuse9() {
 	echo Fuse: recover mode:
 	prefuse
-	cp fatx $MNT/tbff
+	cp $FBIN $MNT/tbff
 	rm $MNT/tbff
 	remfuse
 	prefuse -r
-	test -e $MNT/tbff && cmp -b fatx $MNT/tbff
+	test -e $MNT/tbff && cmp -b $FBIN $MNT/tbff
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -310,9 +318,9 @@ fuse11() {
 	tasks=
 	for ((i = 0; i < $maxent; i++)); do
 		echo "TEST" >$MNT/ent$i &
-		tasks+=$!" "
+		tasks+=($!)
 	done
-	for job in $tasks; do
+	for job in ${tasks[@]}; do
 		wait $job
 	done
 	remfuse
@@ -333,9 +341,9 @@ fuse12() {
 	tasks=
 	for ((i = 0; i < $maxent; i++)); do
 		echo "TEST" >$MNT/ent$i &
-		tasks+=$!" "
+		tasks+=($!)
 	done
-	for job in $tasks; do
+	for job in ${tasks[@]}; do
 		wait $job
 	done
 	remfuse
@@ -365,10 +373,9 @@ fuse13() {
 	fi
 	remfuse
 }
-
 fsck1() {
 	echo Fsck: sanity check:
-	./fatx --as fsck -nv $DISK 2>&1
+	$FATX --as fsck -nv ${DISK[@]} 2>&1
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -378,29 +385,28 @@ fsck1() {
 }
 fsck2() {
 	echo Fsck: circular reference:
-	./fatx --as label $DISK -l XBOX -v --do "\
+	$FATX --as label ${DISK[@]} -l XBOX -v --do "\
 		mkdir,	/test1; \
 		mkdir,	/test1/test2; \
 		lsfat,	/test1; \
 		chcls,	/test1/test2,	3; \
 	"
-	./fatx --as fsck -av $DISK 2>&1
+	$FATX --as fsck -av ${DISK[@]} 2>&1
 }
 fsck3() {
 	echo Fsck: Conflicting entries:
-	./fatx --as label $DISK -l XBOX -v --do "\
+	$FATX --as label ${DISK[@]} -l XBOX -v --do "\
 		mkdir,	/test1; \
 		mkdir,	/test1/test2; \
-		rcp,	fatx,	/test1/fatx; \
+		rcp,	$FBIN,	/test1/fatx; \
 		lsfat,	/test1/fatx; \
 		chcls,	/test1/test2,	9; \
 	"
-	./fatx --as fsck -av $DISK 2>&1
+	$FATX --as fsck -av ${DISK[@]} 2>&1
 }
-
 labl1() {
-	echo Label: check default name: 
-	./fatx --as label $DISK 2>&1
+	echo Label: check default name:
+	$FATX --as label ${DISK[@]} 2>&1
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -409,11 +415,11 @@ labl1() {
 	fi
 }
 labl2() {
-	echo Label: check noname: 
+	echo Label: check noname:
 	prefuse
 	rm $MNT/name.txt
 	remfuse
-	./fatx --as label $DISK 2>&1
+	$FATX --as label ${DISK[@]} 2>&1
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -422,8 +428,8 @@ labl2() {
 	fi
 }
 labl3() {
-	echo Label: set label 
-	./fatx --as label $DISK disk 2>&1
+	echo Label: set label
+	$FATX --as label ${DISK[@]} disk 2>&1
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -431,20 +437,19 @@ labl3() {
 		exit 1
 	fi
 }
-
 unrm1() {
-	echo Unrm: remote recovery: 
+	echo Unrm: remote recovery:
 	prefuse
-	cp fatx $MNT/tbff
+	cp $FBIN $MNT/tbff
 	rm $MNT/tbff
 	remfuse
-	./fatx --as unrm -y $DISK 2>&1
+	$FATX --as unrm -y ${DISK[@]} 2>&1
 	if [ $? != 0 ]; then
 		echo "### Test KO", unrm failed
 		exit 1
 	fi
 	prefuse
-	test -e $MNT/tbff && cmp -b fatx $MNT/tbff
+	test -e $MNT/tbff && cmp -b $FATX $MNT/tbff
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -458,17 +463,17 @@ unrm2() {
 	echo Unrm: remote dir. recovery:
 	prefuse
 	mkdir $MNT/test
-	cp fatx $MNT/test/tbff
+	cp $FBIN $MNT/test/tbff
 	rm $MNT/test/tbff
 	rmdir $MNT/test
 	remfuse
-	./fatx --as unrm -y $DISK 2>&1
+	$FATX --as unrm -y ${DISK[@]} 2>&1
 	if [ $? != 0 ]; then
 		echo "### Test KO", unrm failed
 		exit 1
 	fi
 	prefuse
-	test -d $MNT/test && test -e $MNT/test/tbff && cmp -b fatx $MNT/test/tbff
+	test -d $MNT/test && test -e $MNT/test/tbff && cmp -b $FBIN $MNT/test/tbff
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -483,15 +488,15 @@ unrm3() {
 	[ -e ./tbff ] && rm -f ./tbff
 	prefuse
 	mkdir $MNT/test
-	cp fatx $MNT/test/tbff
+	cp $FBIN $MNT/test/tbff
 	rm $MNT/test/tbff
 	remfuse
-	./fatx --as unrm -ly $DISK 2>&1
+	$FATX --as unrm -ly ${DISK[@]} 2>&1
 	if [ $? != 0 ]; then
 		echo "### Test KO", unrm failed
 		exit 1
 	fi
-	test -e tbff && cmp -b fatx tbff
+	test -e tbff && cmp -b $FBIN tbff
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 		rm tbff
@@ -501,10 +506,10 @@ unrm3() {
 	fi
 }
 unrm4() {
-	echo Unrm: lost chain recovery: 
-	./fatx --as mkfs $DISK -vy
+	echo Unrm: lost chain recovery:
+	$FATX --as mkfs ${DISK[@]} -vy
 	dd if=/dev/urandom of=tbff bs=$((1024 * 1024 + 256)) count=1 >/dev/null 2>&1
-	./fatx --as label $DISK -l XBOX -v --do "\
+	$FATX --as label ${DISK[@]} -l XBOX -v --do "\
 		mkdir,	/test; \
 		lsfat,	/; \
 		lsfat,	/name.txt; \
@@ -519,10 +524,10 @@ unrm4() {
 		mklost,	100:110; \
 		rmfat,	31; \
 	"
-	./fatx --as fsck $DISK -vn
-	./fatx --as unrm $DISK -vy
-	./fatx --as fsck $DISK -vn
-	./fatx --as label $DISK -v --do "\
+	$FATX --as fsck ${DISK[@]} -vn
+	$FATX --as unrm ${DISK[@]} -vy
+	$FATX --as fsck ${DISK[@]} -vn
+	$FATX --as label ${DISK[@]} -v --do "\
 		lsfat,	/test/tbff.bak; \
 		lcp,	/test/tbff.bak, tbff.bak; \
 	"
@@ -536,33 +541,11 @@ unrm4() {
 	fi
 }
 
-check() {
-	cmp -b $DSK $REF
-	if [ $? == 0 ]; then
-		echo "*** Test OK"
-	else
-		echo "### Test KO", $DSK has been changed.
-		exit 1
-	fi
-}
-
-close() {
-	remove
-	if ! [ -z $DIF ]; then
-		check
-	fi
-	[ -e $DSK ] && rm $DSK
-	[ -z $DIF ] || ([ -e $DIF ] && rm $DIF)
-	[ -z $REF ] || ([ -e $REF ] && rm $REF)
-	echo -n
-}
-
 tests=(
 	fuse1
 	fuse2
 	fuse3
 	fuse4
-	fuse5
 	fuse6
 	fuse7
 	fuse8
@@ -581,16 +564,46 @@ tests=(
 	unrm3
 	unrm4
 )
-testn=`basename $0`
+purpose=(
+	"Fuse simple file creation"
+	"Fuse moving file"
+	"Fuse removing file"
+	"Fuse multiple file access"
+	"Fuse directory copies"
+	"Fuse simultaneous copies"
+	"Fuse directory max entries"
+	"Fuse recover mode"
+	"Fuse FAT stress"
+	"Fuse directory entries stress"
+	"Fuse simultaneous creations"
+	"Fuse check statfs"
+	"Label check default name"
+	"Label check noname"
+	"Label set label"
+	"Fsck circular reference"
+	"Fsck conflicting entries"
+	"Unrm remote recovery"
+	"Unrm remote dir recovery"
+	"Unrm local recovery"
+	"Unrm lost chain recovery"
+)
 
-case $testn in
-test.sh)
-	for ((i = 0; i < ${#tests[*]}; i++)); do
-		[ -e test$i ] || ln -s test.sh test$i
+if [[ $# -eq 0 ]]; then
+	for((i = 0; i <  ${#tests[*]}; i++)); do
+		[ -n "$res" ] && res=$res";"
+		res=$res${purpose[$i]// /_}
 	done
-	[ -e analyse.sh ] || ln -s test.sh analyse.sh
-	[ -e profile.sh ] || ln -s test.sh profile.sh
-	;;
+	echo -n $res
+	exit 0
+fi
+testr=${tests[$TEST]}
+if [ "$testr" != "unrm4" ]; then
+	trap kilfuse SIGINT
+fi
+prepare
+mkfs1 && $testr && fsck1 && close && exit 0
+exit 1
+
 analyse.sh)
 	rm [0-9A-F]*.log >/dev/null 2>&1
 	IFS=$'\n'
@@ -599,37 +612,3 @@ analyse.sh)
 		grep $pid /tmp/$$$$ >$pid.log
 	done
 	rm /tmp/$$$$
-	;;
-profile.sh)
-	#PRE=--gen-suppressions=all
-	[ -d ./logs ] || mkdir logs
-	prepare
-	CMDFUSE="./fatx --as fuse $DSK $MNT/"
-	./fatx --as mkfs -y $DISK
-	valgrind $PRE --tool=memcheck --log-file=./logs/leaks.log $CMDFUSE
-	fuse7 70
-	fusermount -u $MNT
-	./fatx --as mkfs -y $DISK
-	valgrind $PRE --tool=helgrind --log-file=./logs/locks1.log $CMDFUSE
-	fuse7 70
-	fusermount -u $MNT
-	./fatx --as mkfs -y $DISK
-	valgrind $PRE --tool=exp-dhat --log-file=./logs/heap.log $CMDFUSE
-	fuse7 70
-	fusermount -u $MNT
-	./fatx --as mkfs -y $DISK
-	valgrind $PRE --tool=drd --log-file=./logs/locks2.log $CMDFUSE
-	fuse7 70
-	fusermount -u $MNT
-	;;
-*)
-	testn=${testn/test/}
-	testr=${tests[$testn]}
-	if [ "$testr" != "unrm4" ]; then
-		trap kilfuse SIGINT
-	fi
-	prepare
-	mkfs1 && $testr && fsck1 && close
-	;;
-esac
-

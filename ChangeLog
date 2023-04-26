@@ -1,3 +1,11 @@
+fatx (1.16) unstable; urgency=low
+
+  production changed to cmake
+  corrections due to more restrictive compiler options
+  corrections on bugs in tests
+
+ -- Christophe Duverger <fatx@christopheduverger.fr>
+
 fatx (1.15) unstable; urgency=low
 
   corrected false detection of directories not closed
