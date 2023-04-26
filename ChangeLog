@@ -1,0 +1,123 @@
+fatx (1.15) unstable; urgency=low
+
+  corrected false detection of directories not closed
+  corrected finding invalid entries instead of deleted entries
+  corrected incorrect management of bad characters in file names
+  corrected bug related to datestamps
+  corrected bugs when used with splice
+  corrected bugs in reading buffer
+  disabled use of fuse handler
+
+ -- Christophe Duverger <fatx@christopheduverger.fr>  Fri, 16 Feb 2018 09:01:28 +0100
+
+fatx (1.14) unstable; urgency=low
+
+  corrected interactions (answers where not correctly taken into account)
+  corrected freeing fat clusters during fsck
+  corrected splice transfers
+  added capacity to manage changes on a separate file
+  added detection of clusters sharing between entries
+  reduced memory leaks
+  reduced multithreading conflicts
+  improved accuracy of fsck choices in case of duplicate reference
+  added capacity to handle parallel tests
+  added complementary tests for fsck
+
+ -- Christophe Duverger <fatx@christopheduverger.fr>  Mon, 16 Jan 2017 20:28:32 +0100
+
+fatx (1.13) unstable; urgency=low
+
+  change test.sh to skip tests for machines without /dev/fuse
+
+ -- Christophe Duverger <baxter@about.org>  Wed, 20 Jul 2016 12:32:45 +0100
+
+fatx (1.12) unstable; urgency=low
+
+  apply compliance rules to Debian standards
+
+ -- Christophe Duverger <baxter@about.org>  Tue, 12 Jul 2016 18:21:32 +0100
+
+fatx (1.11) unstable; urgency=low
+
+  corrected more compatibility issues in package production
+  added some basic usage explanations in README
+
+ -- Christophe Duverger <baxter@about.org>  Mon, 27 Jun 2016 09:43:16 +0100
+
+fatx (1.10) unstable; urgency=low
+
+  corrected some compatibility issues in package production
+
+ -- Christophe Duverger <baxter@about.org>  Thu, 16 Jun 2016 09:40:10 +0100
+
+fatx (1.9) unstable; urgency=low
+
+  corrected bad position of end of directory marker
+  add of --cut option to help use of long names
+
+ -- Christophe Duverger <baxter@about.org>  Wed, 24 Dec 2014 02:43:32 +0100
+
+fatx (1.8) unstable; urgency=low
+
+  bug in file name size checking
+  optimisation of lost chain detection
+  errors returned are more accurate
+
+ -- Christophe Duverger <baxter@about.org>  Mon, 17 Nov 2014 14:02:17 +0100
+
+fatx (1.7) unstable; urgency=low
+
+  file name too long error management
+  option partition taken into account
+  mkfs.fatx can now create different kinds of partition tables
+
+ -- Christophe Duverger <baxter@about.org>  Thu, 25 Sep 2014 17:39:44 +0100
+
+fatx (1.6) unstable; urgency=low
+
+  bad file descriptor error when path contains 2 identical names fixed
+  name.txt rename not allowed
+
+ -- Christophe Duverger <baxter@about.org>  Tue, 26 Aug 2014 11:36:24 +0100
+
+fatx (1.5) unstable; urgency=low
+
+  file concurrent access
+
+ -- Christophe Duverger <baxter@about.org>  Sat, 26 Jul 2014 22:38:34 +0100
+
+fatx (1.4) unstable; urgency=low
+
+  memory leaks fixed
+  move (rename) fixed
+  truncate fixed
+  lost chains taken into account for unrm
+  random segfault during file operations
+  and other insidious bugs (like some file copy errors)
+
+ -- Christophe Duverger <baxter@about.org>  Sun, 11 May 2014 21:41:56 +0100
+
+fatx (1.3) unstable; urgency=low
+
+  Few bugs fixed
+
+ -- Christophe Duverger <baxter@about.org>  Mon, 10 Feb 2014 08:40:27 +0100
+
+fatx (1.2) unstable; urgency=low
+
+  Many bugs fixed (but less than previous version)
+  Add of manpages
+
+ -- Christophe Duverger <baxter@about.org>  Tue, 28 Jan 2014 18:16:19 +0100
+
+fatx (1.1) unstable; urgency=low
+
+  Many bugs fixed
+
+ -- Christophe Duverger <baxter@about.org>  Sat, 04 Jan 2014 13:44:17 +0100
+
+fatx (1.0) unstable; urgency=low
+
+  Initial release
+
+ -- Christophe Duverger <baxter@about.org>  Fri, 05 Apr 2013 19:22:39 +0200

@@ -1,0 +1,91 @@
+FATX filesystem support (XBOX 360)
+
+Copyright (C) 2012-2018 Christophe Duverger
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 3 of the License.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+USAGE:
+This package includes 5 tools:
+- fusefatx to mount a fatx file system
+- mkfs.fatx to create a fatx file system
+- label.fatx to print or change the name of a fatx file system
+- fsck.fatx to check a fatx file system
+- unrm.fatx to try to recover deleted files on a fatx file system
+
+For each of these commands you can get help by either typing:
+<command name> -h or <command name> --help (like "fusefatx -h") to
+get command syntax
+or
+man <command name> (like "man fusefatx") to access to command man
+page
+
+- fusefatx:
+You can use "fusefatx <device name> <directory name>" to mount a
+fatx partition in a directory.
+The device name can be a usual device like /dev/sdb2 or a standard
+file containing a fatx partition.
+The directory name is the mount point where the filesystem structure
+will appear.
+You can mount the filesystem in read-only mode with the -t option:
+"fusefatx -t /dev/sdb2 /mnt"
+The -r option is used to search for deleted files in the filesystem
+and have them appear in the mount point in order to recover them:
+"fusefatx -r /dev/sdb2 /mnt"
+In that case, the filesystem is mounted read only.
+
+- mkfs.fatx:
+This tool is used to make a brand new fatx filesystem, but be careful
+is erases everything existing in the device.
+Basic usage:
+"mkfs.fatx <device name>"
+The device name can be a usual device like /dev/sdb2 or a standard
+file.
+The option -l is used to set the filesystem label:
+"mkfs.fatx /dev/sdb2 -l MYNAME"
+
+- label.fatx:
+"label.fatx <device name>" displays the label of an existing fatx
+filesystem.
+The device name can be a usual device like /dev/sdb2 or a standard
+file containing a fatx partition.
+The option -l is used to change the filesystem label:
+"label.fatx /dev/sdb2 -l MYNAME"
+
+- fsck.fatx:
+fsck.fatx scan a filesystem and checks its consistency, correcting
+errors if any:
+"fsck.fatx <device name>"
+The device name can be a usual device like /dev/sdb2 or a standard
+file containing a fatx partition.
+The -t option enables running this tool in dry-run mode, in that
+case, the filesystem is opened in read only mode:
+"fsck.fatx -t /dev/sdb2"
+The -a option avoids the user to answer to inconsistency resolution
+questions, so that the tool choose the default answer:
+"fsck.fatx -a /dev/sdb2"
+
+- unrm.fatx:
+unrm.fatx searches in a fatx filesystem for deleted files and
+propose to recover them inside the fatx filesystem or outside.
+Basic usage:
+"unrm.fatx <device name>"
+The device name can be a usual device like /dev/sdb2 or a standard
+file containing a fatx partition.
+The -t option enables running this tool in dry-run mode, in that
+case, the filesystem is opened in read only mode:
+"unrm.fatx -t /dev/sdb2"
+The -l option enables to recover deleted files outside the fatx
+filesystem in the current directory (from where the tool is called)
+"unrm.fatx -l /dev/sdb2"
+The user will be prompted for each deleted file found to recover it
+or not.

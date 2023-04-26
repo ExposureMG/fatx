@@ -1,0 +1,6 @@
+Some additional features to implement:
+- scan all blocks in fsck to find lost entries
+- parallelize scan at start
+- ensure operations by transactions
+- add defrag.fatx
+- add resize.fatx
