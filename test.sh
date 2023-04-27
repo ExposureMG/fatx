@@ -19,7 +19,7 @@ prepare() {
 	echo Prepare context
 	[ -d $MNT ] || mkdir $MNT
 	[ -e $DSK ] || dd if=<(yes $'\xFF' | tr -d "\n") of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
-#	[ -e $DSK ] || dd if=/dev/urandom of=$DSK bs=$((1024*1024)) count=600 iflag=fullblock
+#	[ -e $DSK ] || dd if=/dev/urandom of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
 	REF=$(basename $DSK .fat).ref
 	[ -z $DIF ] || [ -e $DIF ] || (touch $DIF; cp $DSK $REF)
 	rm -rf $MNT/* || fusermount -u $MNT && rm -rf $MNT/*
@@ -485,7 +485,7 @@ unrm2() {
 }
 unrm3() {
 	echo Unrm: local recovery:
-	[ -e ./tbff ] && rm -f ./tbff
+	[ -f ./test/tbff ] && rm -f ./test/tbff && rmdir ./test
 	prefuse
 	mkdir $MNT/test
 	cp $FBIN $MNT/test/tbff
@@ -496,10 +496,10 @@ unrm3() {
 		echo "### Test KO", unrm failed
 		exit 1
 	fi
-	test -e tbff && cmp -b $FBIN tbff
+	test -e test/tbff && cmp -b $FBIN test/tbff
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
-		rm tbff
+		rm test/tbff && rmdir test
 	else
 		echo "### Test KO", file not recovered or files are different
 		exit 1

@@ -351,17 +351,17 @@ void						fatx_context::	destroy() {
 }
 
 							frontend::		frontend(int ac, const char* const * const av) :
-	readonly(false),		prog(unknown),			force_y(false),		force_n(false),		force_a(false),
-	verbose(false),		recover(false),		local(false),			deldate(true),			dellost(true),
+	readonly(false),		prog(unknown),			force_y(false),         force_n(false),         force_a(false),
+	verbose(false),         recover(false),         local(false),			deldate(true),			dellost(true),
 	fuse_debug(false),		fuse_foregrd(false),	fuse_singlethr(false),	nofat(false),			cutname(false),
 	argc(ac),				argv(av),				progname(av[0]),		dialog(true),			lostfound(def_landf),
 	foundfile(def_fpre),	filecount(0),			mount(),				volname(),				fuse_option(),
 	unkopt(),				partition("x2"),		table(),				clus_size(0),			uid(getuid()),
 	gid(getgid()),
 	mask(
-			S_IRUSR | S_IWUSR | S_IXUSR |
-			S_IRGRP | S_IXGRP |
-			S_IROTH | S_IXOTH
+		S_IRUSR | S_IWUSR | S_IXUSR |
+		S_IRGRP | S_IXGRP |
+		S_IROTH | S_IXOTH
 	), allyes(true), offset(0), size(0), input(), script(), diffile() {
 }
 bool						frontend::		getanswer(bool def) {
@@ -503,6 +503,8 @@ int							frontend::		setup() {
 			"\"sc\" for system cache,\n"
 			"\"gc\" for game cache,\n"
 			"\"cp\" for content partition,\n"
+			"\"se1\" for sysext partition,\n"
+			"\"se2\" for sysext2 partition,\n"
 			"\"x1\" for xbox 1,\n"
 			"\"x2\" for xbox 2 (default)"
 		)
@@ -1468,6 +1470,18 @@ int							fatxpar::		setup() {
 		) {
 			par_start	= 0x80080000;
 			par_size	= 0xA0E30000;
+		}
+		else if(fatx_context::get()->mmi.partition == "se1"
+			&& (!fatx_context::get()->mmi.table.empty() || fatx_context::get()->dev.read(0x10C080000).find(fsid, 0) == 0)
+		) {
+			par_start	= 0x10C080000;
+			par_size	= 0xCE30000;
+		}
+		else if(fatx_context::get()->mmi.partition == "se2"
+			&& (!fatx_context::get()->mmi.table.empty() || fatx_context::get()->dev.read(0x118EB0000).find(fsid, 0) == 0)
+		) {
+			par_start	= 0x118EB0000;
+			par_size	= 0x8000000;
 		}
 		else if(fatx_context::get()->mmi.partition == "x1"
 			&& (!fatx_context::get()->mmi.table.empty() || fatx_context::get()->dev.read(0x120eb0000).find(fsid, 0) == 0)
@@ -2795,21 +2809,20 @@ void						entry::			recover() {
 	if(fatx_context::get()->mmi.local) {
 		if(!flags().dir) {
 			ifstream fr;
-			fr.open(name());
+			filesystem::create_directories(filesystem::path("./" + path()).remove_filename());
+			fr.open("./" + path());
 			if(fr) {
 				fr.close();
 				console::write("Can't open file for writing, file already exists locally.\n", true);
 			}
 			else {
-				ofstream f(name(), ios::binary | ios::trunc);
+				ofstream f("./" + path(), ios::binary | ios::trunc);
 				string s(size(), '\0');
 				data(&s[0], true, 0, size());
 				f << s;
 				f.close();
 			}
 		}
-		else
-			console::write("I don't rebuild locally the directory tree.\n", true);
 	}
 	else {
 		entry* e = parent()->find(name());

@@ -55,6 +55,7 @@
 #include <iostream>
 #include <fcntl.h>
 #include <time.h>
+#include <filesystem>
 #include <boost/program_options.hpp>
 #include <boost/interprocess/sync/interprocess_upgradable_mutex.hpp>
 #define FUSE_USE_VERSION 29
