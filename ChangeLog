@@ -3,6 +3,9 @@ fatx (1.16) unstable; urgency=low
   production changed to cmake
   corrections due to more restrictive compiler options
   corrections of bugs in tests
+  unrm with --local rebuilds directory structure
+  std::placeholders added for bind
+  --nolost and --nodate options are more explicit
 
  -- Christophe Duverger <fatx@christopheduverger.fr>
 

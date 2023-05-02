@@ -2,7 +2,7 @@
 .\" Copyright 2013, 2023 by Christophe Duverger.  All Rights Reserved.
 .\" This file may be copied under the terms of the GNU Public License.
 .\"
-.TH FUSEFATX 8 "January  2017"
+.TH FUSEFATX 8 "January  2023"
 .SH NAME
 fusefatx \- mounts an Xbox 360 fatx file system
 .SH SYNOPSIS
@@ -45,7 +45,7 @@ fusefatx \- mounts an Xbox 360 fatx file system
 .I size
 ]
 [
-.B \-p | \-\-partition sc|gc|cp|x1|x2
+.B \-p | \-\-partition sc|gc|cp|se1|se2|x1|x2
 ]
 [
 .B \-i | \-\-input
@@ -107,7 +107,7 @@ to be passed to FUSE. See
 .I fuse(8)
 manpage for more details.
 .TP
-.B \-p, \-\-partition sc|gc|cp|x1|x2
+.B \-p, \-\-partition sc|gc|cp|se1|se2|x1|x2
 Choose the partition to be checked, depending on the device. By default, xbox 2 partition is selected.
 .br
 .B sc

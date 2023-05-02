@@ -351,12 +351,12 @@ void						fatx_context::	destroy() {
 }
 
 							frontend::		frontend(int ac, const char* const * const av) :
-	readonly(false),		prog(unknown),			force_y(false),         force_n(false),         force_a(false),
-	verbose(false),         recover(false),         local(false),			deldate(true),			dellost(true),
+	readonly(false),		prog(unknown),			force_y(false),			force_n(false),			force_a(false),
+	verbose(false),			recover(false),			local(false),			deldate(true),			dellost(true),
 	fuse_debug(false),		fuse_foregrd(false),	fuse_singlethr(false),	nofat(false),			cutname(false),
 	argc(ac),				argv(av),				progname(av[0]),		dialog(true),			lostfound(def_landf),
 	foundfile(def_fpre),	filecount(0),			mount(),				volname(),				fuse_option(),
-	unkopt(),				partition("x2"),		table(),				clus_size(0),			uid(getuid()),
+	unkopt(),				partition("x2"),		table("hd"),			clus_size(0),			uid(getuid()),
 	gid(getgid()),
 	mask(
 		S_IRUSR | S_IWUSR | S_IXUSR |
@@ -500,14 +500,23 @@ int							frontend::		setup() {
 		("size", value<streamptr>(), "force partition size")
 		("partition,p", value<string>()->default_value("x2"),
 			"select partition:\n"
-			"\"sc\" for system cache,\n"
-			"\"gc\" for game cache,\n"
-			"\"cp\" for content partition,\n"
+			"\"sc\"  for system cache partition,\n"
+			"\"gc\"  for game cache partition,\n"
 			"\"se1\" for sysext partition,\n"
 			"\"se2\" for sysext2 partition,\n"
-			"\"x1\" for xbox 1,\n"
-			"\"x2\" for xbox 2 (default)"
+			"\"xdv\" for XBOX 360 dashboard volume partition,\n"
+			"\"x1\"  for XBOX 1 compatibility partition,\n"
+			"\"x2\"  for data partition (default)"
 		)
+		("table,b", value<string>()->default_value("hd"),
+			"select partition table:\n"
+			"\"file\" for plain file,\n"
+			"\"mu\"   for memory unit,\n"
+			"\"usb\"  for USB drive,\n"
+			"\"hd\"   for XBOX 360 hard disk (default),\n"
+			"\"kit\"  for devkit hard disk"
+			// "\"kit\"  for DevKit HDD,\n"
+		 )
 	;
 	if(prog == fuse) {
 		visible.add_options()
@@ -531,14 +540,6 @@ int							frontend::		setup() {
 	if(prog == mkfs) {
 		visible.add_options()
 			("cls-size,c", value<streamptr>(), "set num of blocks per cluster")
-			("table,b", value<string>(),
-				"select partition table:\n"
-				"\"mu\"   for Memory Unit,\n"
-				"\"file\" for plain file,\n"
-				"\"hd\"   for XBOX360 HDD,\n"
-				"\"kit\"  for DevKit HDD,\n"
-				"\"usb\"  for USB Drive"
-			)
 		;
 	}
 	if(prog == fsck || prog == unrm || prog == mkfs) {
@@ -1414,149 +1415,142 @@ string						device::		print(streamptr p, size_t s, size_t g) {
 	root_start(0),			root_clus(0) { }
 int							fatxpar::		setup() {
 	uint64_t ts = fatx_context::get()->dev.size();
+	bool found = false;
 	if(fatx_context::get()->mmi.verbose)
 		console::write((format("Support size: %d.\n") % ts).str());
-	bool found = false;
+	map<string, map<string, pair<streamptr, streamptr>>> sch = {
+		{ "file", {
+			{ "x2",		{	0x0,			0x0			}}
+		}},
+		{ "mu", {
+			{ "sc",		{	0x0,			0x7FF000	}},
+			{ "x2",		{	0x7FF000,		0x0			}}
+		}},
+		{ "usb", {
+			{ "sc",		{	0x8000400,		0x12000400	}},
+			{ "se1",	{	0x8115200,		0x8000000	}},
+			{ "se2",	{	0x12000400,		0xDFFFC00	}},
+			{ "x2",		{	0x20000000,		0x0			}}
+		}},
+		{ "hd", {
+			{ "sc",		{	0x80000,		0x80000000	}},
+			{ "gc",		{	0x80080000,		0xA0E30000	}},
+			{ "se1",	{	0x10C080000,	0xCE30000	}},
+			{ "se2",	{	0x118EB0000,	0x8000000	}},
+			{ "x1",		{	0x120eb0000,	0x10000000	}},
+			{ "x2",		{	0x130eb0000,	0x0			}}
+		}}
+	};
+	map<string, string> names = {
+		{ "file",	"plain file" },
+		{ "mu",		"memory unit" },
+		{ "usb",	"USB drive" },
+		{ "hd",		"XBOX 360 hard disk" },
+		{ "kit",	"devkit hard disk" },
+		{ "sc",		"system cache" },
+		{ "gc",		"game cache" },
+		{ "se1",	"sysext" },
+		{ "se2",	"sysext 2" },
+		{ "xdv",	"XBOX 360 dashboard volume"},
+		{ "x1",		"XBOX 1 compatibility" },
+		{ "x2",		"data" }
+	};
+	map<string, set<string>> cap;
+	for(auto i: sch) {
+		if(ts <= ranges::find_if(i.second, [] (const auto j) noexcept { return j.second.second == 0; })->second.first)
+			continue;
+		cap.emplace(i.first, set<string>{});
+		for(auto j: i.second) {
+			if(fatx_context::get()->dev.read(j.second.first).find(fsid, 0) == 0) {
+				cap[i.first].insert(j.first);
+				if(fatx_context::get()->mmi.verbose)
+					console::write((format("Found FATX filesystem in %s partition in %s table.\n")
+						% names[j.first]
+						% names[i.first]
+					).str());
+			}
+		}
+	}
+	if(cap.find("mu") != cap.end() && cap.find("mu")->second.size() == sch["mu"].size() && cap.find("file") != cap.end())
+		cap.erase("file");
 	if(
-		fatx_context::get()->mmi.table.empty() &&
 		fatx_context::get()->mmi.offset != 0 &&
-		fatx_context::get()->dev.read(fatx_context::get()->mmi.offset).find(fsid, 0) == 0
+		(fatx_context::get()->mmi.prog == frontend::mkfs || fatx_context::get()->dev.read(fatx_context::get()->mmi.offset).find(fsid, 0) == 0)
 	) {
 		par_start = fatx_context::get()->mmi.offset;
-		if(fatx_context::get()->mmi.verbose)
+		par_size = ts - par_start;
+		if(fatx_context::get()->mmi.verbose && fatx_context::get()->dev.read(fatx_context::get()->mmi.offset).find(fsid, 0) == 0)
 			console::write((format("Found FATX partition at 0x%016X.\n") % par_start).str());
-		found = true;
+		found = fatx_context::get()->dev.read(fatx_context::get()->mmi.offset).find(fsid, 0) == 0;
 	}
-	if(fatx_context::get()->mmi.table == "mu" || fatx_context::get()->mmi.table == "file" || (fatx_context::get()->mmi.table.empty() && !found &&
-		fatx_context::get()->dev.read(0).find(fsid, 0) == 0
-	)) {
-		if(ts > 0x7FF000
-			&& ((!fatx_context::get()->mmi.table.empty() && fatx_context::get()->mmi.table == "mu")
-			|| (fatx_context::get()->mmi.table.empty() && fatx_context::get()->dev.read(0x7FF000).find(fsid, 0) == 0))
-		) {
+	else if(
+		cap.find(fatx_context::get()->mmi.table) != cap.end() && (
+			fatx_context::get()->mmi.prog == frontend::mkfs ||
+			cap[fatx_context::get()->mmi.table].find(fatx_context::get()->mmi.partition) != cap[fatx_context::get()->mmi.table].end()
+		)
+	) {
+		par_start = sch[fatx_context::get()->mmi.table][fatx_context::get()->mmi.partition].first;
+		par_size = sch[fatx_context::get()->mmi.table][fatx_context::get()->mmi.partition].second != 0 ? sch[fatx_context::get()->mmi.table][fatx_context::get()->mmi.partition].second : ts - par_start;
+		found = cap[fatx_context::get()->mmi.table].find(fatx_context::get()->mmi.partition) != cap[fatx_context::get()->mmi.table].end();
+	}
+	else if(fatx_context::get()->mmi.table == "kit") {
+		devheader dh(&fatx_context::get()->dev.read(0)[0]);
+		if(dh.id != 0x00020000 && fatx_context::get()->mmi.prog == frontend::mkfs)
+			dh = devheader(ts);
+		if(fatx_context::get()->dev.read(dh.p2_start * blksize).find(fsid, 0) == 0) {
 			if(fatx_context::get()->mmi.verbose)
-				console::write((boost::format("%s FATX partition in Memory Unit.\n") % (fatx_context::get()->mmi.table.empty() ? "Found" : "Force")).str());
-			if(fatx_context::get()->mmi.partition == "sc") {
-				par_start	= 0;
-				par_size	= 0x7FF000;
+				console::write((format("Found FATX filesystem in %s partition in %s table.\n")
+					% names["x2"]
+					% names["kit"]
+				).str());
+			if(fatx_context::get()->mmi.partition == "x2") {
+				par_start	= dh.p2_start * blksize;
+				par_size	= dh.p2_size * blksize;
+				found = true;
 			}
-			else {
-				par_start	= 0x7FF000;
-				par_size	= ts - par_start;
-				fatx_context::get()->mmi.partition = "x2";
+		}
+		if(fatx_context::get()->dev.read(dh.p1_start * blksize).find(fsid, 0) == 0) {
+			if(fatx_context::get()->mmi.verbose)
+				console::write((format("Found FATX filesystem in %s partition in %s table.\n")
+					% names["xdv"]
+					% names["kit"]
+				).str());
+			if(fatx_context::get()->mmi.partition == "xdv") {
+				par_start	= dh.p1_start * blksize;
+				par_size	= dh.p1_size * blksize;
+				found = true;
 			}
+		}
+	}
+	else {
+		if(fatx_context::get()->mmi.prog == frontend::mkfs) {
+			console::write((format("No space for partition in %s table.\n") % names[fatx_context::get()->mmi.table]).str(), true);
+			return ENOSPC;
 		}
 		else {
-			if(fatx_context::get()->mmi.verbose)
-				console::write((boost::format("%s FATX partition in partition file.\n") % (fatx_context::get()->mmi.table.empty() ? "Found" : "Force")).str());
-			par_start	= 0;
-			par_size	= ts - par_start;
-		}
-		found = true;
-	}
-	if(ts > 0x130eb0000 && (fatx_context::get()->mmi.table == "hd" || (fatx_context::get()->mmi.table.empty() && !found &&
-		fatx_context::get()->dev.read(0x130eb0000	).find(fsid, 0) == 0
-	))) {
-		if(fatx_context::get()->mmi.verbose)
-			console::write((boost::format("%s FATX partition in XBox360 HDD.\n") % (fatx_context::get()->mmi.table.empty() ? "Found" : "Force")).str());
-		if(fatx_context::get()->mmi.partition == "sc"
-			&& (!fatx_context::get()->mmi.table.empty() || fatx_context::get()->dev.read(0x80000	).find(fsid, 0) == 0)
-		) {
-			par_start	= 0x80000;
-			par_size	= 0x80000000;
-		}
-		else if(fatx_context::get()->mmi.partition == "gc"
-			&& (!fatx_context::get()->mmi.table.empty() || fatx_context::get()->dev.read(0x80080000	).find(fsid, 0) == 0)
-		) {
-			par_start	= 0x80080000;
-			par_size	= 0xA0E30000;
-		}
-		else if(fatx_context::get()->mmi.partition == "se1"
-			&& (!fatx_context::get()->mmi.table.empty() || fatx_context::get()->dev.read(0x10C080000).find(fsid, 0) == 0)
-		) {
-			par_start	= 0x10C080000;
-			par_size	= 0xCE30000;
-		}
-		else if(fatx_context::get()->mmi.partition == "se2"
-			&& (!fatx_context::get()->mmi.table.empty() || fatx_context::get()->dev.read(0x118EB0000).find(fsid, 0) == 0)
-		) {
-			par_start	= 0x118EB0000;
-			par_size	= 0x8000000;
-		}
-		else if(fatx_context::get()->mmi.partition == "x1"
-			&& (!fatx_context::get()->mmi.table.empty() || fatx_context::get()->dev.read(0x120eb0000).find(fsid, 0) == 0)
-		) {
-			par_start	= 0x120eb0000;
-			par_size	= 0x10000000;
-		}
-		else {
-			par_start	= 0x130eb0000;
-			par_size	= ts - par_start;
-			fatx_context::get()->mmi.partition = "x2";
-		}
-		found = true;
-	}
-	if(ts > 0x20000000 && (fatx_context::get()->mmi.table == "usb" || (fatx_context::get()->mmi.table.empty() && !found &&
-		fatx_context::get()->dev.read(0x20000000	).find(fsid, 0) == 0
-	))) {
-		if(fatx_context::get()->mmi.verbose)
-			console::write((boost::format("%s FATX partition in USB Drive.\n") % (fatx_context::get()->mmi.table.empty() ? "Found" : "Force")).str());
-		if(fatx_context::get()->mmi.partition == "sc"
-			&& (!fatx_context::get()->mmi.table.empty() || fatx_context::get()->dev.read(0x8000400	).find(fsid, 0) == 0)
-		) {
-			par_start	= 0x8000400;
-			par_size	= 0x4800000;
-		}
-		else {
-			par_start	= 0x20000000;
-			par_size	= ts - par_start;
-			fatx_context::get()->mmi.partition = "x2";
-		}
-		found = true;
-	}
-	if(fatx_context::get()->mmi.table == "kit" || (fatx_context::get()->mmi.table.empty() && !found)) {
-		devheader&& dh = devheader(ts);
-		if(fatx_context::get()->mmi.table.empty())
-			dh = devheader(&fatx_context::get()->dev.read(0)[0]);
-		if(!fatx_context::get()->mmi.table.empty() || (
-			dh.id == 0x00020000 &&
-			fatx_context::get()->dev.read(dh.p2_start * blksize).find(fsid, 0) == 0
-		)) {
-			if(fatx_context::get()->mmi.verbose)
-				console::write((boost::format("%s FATX partition in DevKit HDD.\n") % (fatx_context::get()->mmi.table.empty() ? "Found" : "Force")).str());
-			if(fatx_context::get()->mmi.partition == "cp"
-				&& (!fatx_context::get()->mmi.table.empty() || fatx_context::get()->dev.read(dh.p1_start * blksize).find(fsid, 0) == 0)
-			) {
-				par_start	= dh.p1_start	* blksize;
-				par_size	= dh.p1_size	* blksize;
-			}
-			else {
-				par_start	= dh.p2_start	* blksize;
-				par_size	= dh.p2_size	* blksize;
-				fatx_context::get()->mmi.partition = "x2";
-			}
-			found = true;
-		}
-	}
-	if(!fatx_context::get()->mmi.table.empty())
-		found = false;
-	if(!found) {
-		console::write("No FATX partition found.\n", true);
-		if(fatx_context::get()->mmi.prog != frontend::mkfs)
+			console::write("No FATX partition found.\n", true);
 			return ENODATA;
+		}
+	}
+	if(fatx_context::get()->mmi.size != 0) {
+		if(fatx_context::get()->mmi.offset == 0 && fatx_context::get()->mmi.table != "file")
+			console::write((format("Can't force size for a partion in %s table. Ignoring.\n") % names[fatx_context::get()->mmi.partition]).str(), true);
+		else if(fatx_context::get()->mmi.size >= par_size)
+			console::write((format("Can't force a greater size than possible (limit is %d). Ignoring.\n") % par_size).str(), true);
+		else
+			par_size = fatx_context::get()->mmi.size;
 	}
 	if(found) {
 		if(fatx_context::get()->mmi.verbose)
-			console::write((format("Using \"%s\" partition.\n") % fatx_context::get()->mmi.partition).str());
+			console::write((format("Using %s partition in %s table.\n") % names[fatx_context::get()->mmi.partition] % names[fatx_context::get()->mmi.table]).str());
 		bootsect	bs(&fatx_context::get()->dev.read(par_start)[0]);
 		par_id		= bs.id;
 		root_clus	= bs.root;
 		clus_size	= static_cast<uint32_t>(blksize * (fatx_context::get()->mmi.clus_size ? fatx_context::get()->mmi.clus_size : (bs.spc == 0 || bs.spc > 0xFFFF) ? 1 : bs.spc));
 	}
 	else {
-		par_start	= par_start ? par_start : fatx_context::get()->mmi.offset;
-		par_size	= par_size ? par_size : ts - par_start;
 		par_id		= 0;
+		root_clus	= 1;
 		clus_size	= static_cast<uint32_t>(blksize * (fatx_context::get()->mmi.clus_size ? fatx_context::get()->mmi.clus_size : (
 			par_size > 0x200000000ULL ?	512	:
 			par_size > 0x100000000ULL ?	256	:
@@ -1571,10 +1565,7 @@ int							fatxpar::		setup() {
 			par_size > 0x000200000ULL ?	2	:
 										1
 		)));
-		root_clus	= 1;
 	}
-	if(fatx_context::get()->mmi.size != 0)
-		par_size = fatx_context::get()->mmi.size;
 	string s(bitset<64>(clus_size).to_string());
 	if(s.find('1') != s.rfind('1')) {
 		console::write("Size of clusters is not a power of 2.\n", true);

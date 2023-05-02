@@ -102,7 +102,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     -fsanitize=return
     -fsanitize=signed-integer-overflow
     -fsanitize=bounds
-    -fsanitize=bounds-strict
+    # -fsanitize=bounds-strict
     -fsanitize=alignment
     -fsanitize=object-size
     -fsanitize=float-divide-by-zero
@@ -149,8 +149,6 @@ add_executable(
   src/fatx.hpp
   src/fatx.cpp
   test.sh
-  INSTALL
-  README
   ChangeLog
   man/fatx.8
   man/fusefatx.8

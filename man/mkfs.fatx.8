@@ -2,7 +2,7 @@
 .\" Copyright 2013, 2023 by Christophe Duverger.  All Rights Reserved.
 .\" This file may be copied under the terms of the GNU Public License.
 .\"
-.TH MKFS.FATX 8 "January  2017"
+.TH MKFS.FATX 8 "January  2023"
 .SH NAME
 mkfs.fatx \- creates an Xbox 360 fatx file system
 .SH SYNOPSIS
@@ -23,7 +23,7 @@ mkfs.fatx \- creates an Xbox 360 fatx file system
 .I size
 ]
 [
-.B \-p | \-\-partition sc|gc|cp|x1|x2
+.B \-p | \-\-partition sc|gc|cp|se1|se2|x1|x2
 ]
 [
 .B \-l | \-\-table mu|file|hd|kit|usb
@@ -90,7 +90,7 @@ Assume an answer of ``no'' to all questions. Allows
 .B mkfs.fatx
 to be used non-interactively.
 .TP
-.B \-p, \-\-partition sc|gc|cp|x1|x2
+.B \-p, \-\-partition sc|gc|cp|se1|se2|x1|x2
 Choose the partition to create, depending on the device. By default, xbox 2 partition is selected.
 .br
 .B sc

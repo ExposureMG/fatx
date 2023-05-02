@@ -23,7 +23,7 @@ prepare() {
 	REF=$(basename $DSK .fat).ref
 	[ -z $DIF ] || [ -e $DIF ] || (touch $DIF; cp $DSK $REF)
 	rm -rf $MNT/* || fusermount -u $MNT && rm -rf $MNT/*
-	DISK=($DSK)
+	DISK=(--table file $DSK)
 	[ -z $DIF ] || DISK+=(--diff $DIF)
 }
 remove() {
