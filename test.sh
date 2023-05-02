@@ -17,12 +17,12 @@ MNT=mnt.$$
 
 prepare() {
 	echo Prepare context
+	[ -d $MNT ] && fusermount -u $MNT
 	[ -d $MNT ] || mkdir $MNT
-	[ -e $DSK ] || dd if=<(yes $'\xFF' | tr -d "\n") of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
-#	[ -e $DSK ] || dd if=/dev/urandom of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
-	REF=$(basename $DSK .fat).ref
+#	[ -e $DSK ] || dd if=<(yes $'\xFF' | tr -d "\n") of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
+	[ -e $DSK ] || dd if=/dev/urandom of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
+	REF=$(basename $DSK).ref
 	[ -z $DIF ] || [ -e $DIF ] || (touch $DIF; cp $DSK $REF)
-	rm -rf $MNT/* || fusermount -u $MNT && rm -rf $MNT/*
 	DISK=(--table file $DSK)
 	[ -z $DIF ] || DISK+=(--diff $DIF)
 }

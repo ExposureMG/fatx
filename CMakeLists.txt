@@ -150,45 +150,33 @@ add_executable(
   src/fatx.cpp
   test.sh
   ChangeLog
-  man/fatx.8
-  man/fusefatx.8
-  man/mkfs.fatx.8
-  man/fsck.fatx.8
-  man/label.fatx.8
-  man/unrm.fatx.8)
+  man8/fatx.8
+  man8/fusefatx.8
+  man8/mkfs.fatx.8
+  man8/fsck.fatx.8
+  man8/label.fatx.8
+  man8/unrm.fatx.8)
 target_link_libraries(fatx ${Boost_LIBRARIES} ${FUSE_LIBRARIES})
 
 add_custom_target(
   test.sh ALL COMMAND ${CMAKE_COMMAND} -E copy_if_different
                       ${PROJECT_SOURCE_DIR}/test.sh ${PROJECT_BINARY_DIR})
-set(aliases "fusefatx mkfs.fatx label.fatx fsck.fatx unrm.fatx")
-foreach(i ${aliases})
-  add_custom_command(
-    OUTPUT ${i}
+foreach(i fusefatx mkfs.fatx label.fatx fsck.fatx unrm.fatx)
+  add_custom_target(
+    ${i} ALL
     COMMAND ${CMAKE_COMMAND} -E create_symlink fatx ${i}
     DEPENDS fatx)
+  install(FILES ${PROJECT_BINARY_DIR}/${i} TYPE SBIN)
 endforeach(i)
 
-install(TARGETS fatx RUNTIME)
-install(FILES ${aliases} TYPE BIN)
-install(DIRECTORY man TYPE MAN)
-install(
-  FILES README
-        INSTALL
-        COPYING
-        TODO
-        BUGS
-        NEWS
-        AUTHORS
-        ChangeLog
-  TYPE DOC)
+install(FILES $<TARGET_FILE:fatx> TYPE SBIN)
+install(DIRECTORY man8 TYPE MAN)
+install(FILES README COPYING TODO AUTHORS ChangeLog TYPE DOC)
 
 set(DOXYGEN_PROJECT_LOGO doc/fatx.jpg)
 doxygen_add_docs(doc src)
-if(DOXYGEN_FOUND)
-  install(DIRECTORY ${CMAKE_BINARY_DIR}/html
-          DESTINATION share/doc/${CMAKE_PROJECT_NAME})
-endif(DOXYGEN_FOUND)
+# if(DOXYGEN_FOUND) install(DIRECTORY ${CMAKE_BINARY_DIR}/html DESTINATION
+# share/doc/${CMAKE_PROJECT_NAME}) endif(DOXYGEN_FOUND)
 
 enable_testing()
 set(CTEST_OUTPUT_ON_FAILURE 1)
