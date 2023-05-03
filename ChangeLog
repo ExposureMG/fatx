@@ -7,6 +7,7 @@ fatx (1.16) unstable; urgency=low
   unrm with --local rebuilds directory structure
   corrections of bugs in partitions and partition tables
   corrections of CMakeLists.txt for correct installation
+  INSTALL file modified for cmake instructions
   std::placeholders added for bind
   --nolost and --nodate options are more explicit
 
