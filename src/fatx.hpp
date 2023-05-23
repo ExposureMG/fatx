@@ -1,7 +1,7 @@
-﻿#ifndef FATX_HPP
+#ifndef FATX_HPP
 #define FATX_HPP
 /*
- *	FATX filesystem support
+ *	FATX filesystem support (Xbox 360)
  *
  *  Copyright (C) 2012-2023 Christophe Duverger
  *
@@ -46,7 +46,7 @@
  *	 "mkfs.fatx"	for filesystem creation
  *	 "fsck.fatx"	for filesystem check and repair
  *	 "unrm.fatx"	for recovery of deleted files
- *	 "label.fatx"	for display or change volume name
+ *	 "label.fatx"	for display or change volume label
  *
  *  Use -h option for each symlink call to find syntax and options list
  */
@@ -56,11 +56,10 @@
 #include <fcntl.h>
 #include <time.h>
 #include <filesystem>
-#include <boost/program_options.hpp>
-#include <boost/interprocess/sync/interprocess_upgradable_mutex.hpp>
 #define FUSE_USE_VERSION 29
 #include <fuse.h>
 
+#include <thread>
 #include <string>
 #include <vector>
 #include <memory>
@@ -79,17 +78,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include <boost/cstdint.hpp>
-#include <boost/integer.hpp>
-
+#include <boost/program_options.hpp>
+#include <boost/thread/shared_mutex.hpp>
 #include <boost/format.hpp>
 #include <boost/tokenizer.hpp>
-#include <boost/lexical_cast.hpp>
 #include <boost/bimap.hpp>
 #include <boost/bimap/list_of.hpp>
 #include <boost/bimap/set_of.hpp>
 #include <boost/bimap/multiset_of.hpp>
-#include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/ptr_container/ptr_vector.hpp>
 
 using namespace std;
@@ -142,7 +138,7 @@ extern const char * const			def_label;								// default label name
 // Macro for debug output
 //
 #ifndef NDEBUG
-void								dbglog(const string &);
+inline void							dbglog(const string &);
 #endif
 
 #if !defined NDEBUG && !defined DBGCR
@@ -195,8 +191,7 @@ public:
 
 // Mutex management
 //
-class								mymutx
-	: public boost::interprocess::interprocess_upgradable_mutex
+class								mymutx : public boost::upgrade_mutex
 {
 private:
 	string							nam;
@@ -251,7 +246,7 @@ public:
 	void							clear();
 	value_type						operator () (const key_type&);
 	int								operator () (const key_type&, const value_type&);
-	void							operator () ();
+	void							print();
 };
 
 // Entries attributes
@@ -879,7 +874,7 @@ typename read_cache<key_t, value_t>::value_type
 				container.right.erase(container.right.begin(), b);
 				#if !defined NDEBUG && defined DBG_CACHE
 					#ifdef DBG_CACHDMP
-						(*this)();
+						print();
 					#endif
 				#endif
 			}
@@ -888,7 +883,7 @@ typename read_cache<key_t, value_t>::value_type
 			#if !defined NDEBUG && defined DBG_CACHE
 				dbglog((format(".xX fatbuf: 0x%08X - 0x%08X (%d/%d)\n") % k % (k + vv.size() - 1) % vv.size() % container.size()).str());
 				#ifdef DBG_CACHDMP
-					(*this)();
+					print();
 				#endif
 			#endif
 			access.unlock();
@@ -924,10 +919,9 @@ int			read_cache<key_t, value_t>::
 #if !defined NDEBUG && defined DBG_CACHDMP
 template<typename key_t, typename value_t>
 void		read_cache<key_t, value_t>::
-									operator () () {
+									print() {
 	string res;
 	size_t j = 0;
-	access.lock();
 	for(const auto& i: container.right) {
 		res += (format(" %08X") % i.second).str();
 		if(++j % (DBGCR / 4) == 0) {
@@ -936,7 +930,6 @@ void		read_cache<key_t, value_t>::
 		}
 	}
 	dbglog(res + "\n");
-	access.unlock();
 }
 #endif
 

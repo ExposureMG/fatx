@@ -7,23 +7,26 @@ FATX=./fatx
 FBIN=$FATX
 FTXT=test.sh
 
-SIZE=300
+SIZE=6000
 WAIT=3
-TIMEOUT=120
+TIMEOUT=300
+TABLE=hd
+PARTITION=x2
 
-DSK=disk.$$
-#DIF=disk.$$.dif
-MNT=mnt.$$
+DSK=disk.fatx
+#DIF=disk.dif
+MNT=mnt.fatx
+FUSE=
 
 prepare() {
 	echo Prepare context
-	[ -d $MNT ] && fusermount -u $MNT
+	[ -d $MNT ] && fusermount -u $MNT 2>/dev/null
 	[ -d $MNT ] || mkdir $MNT
 #	[ -e $DSK ] || dd if=<(yes $'\xFF' | tr -d "\n") of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
 	[ -e $DSK ] || dd if=/dev/urandom of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
 	REF=$(basename $DSK).ref
 	[ -z $DIF ] || [ -e $DIF ] || (touch $DIF; cp $DSK $REF)
-	DISK=(--table file $DSK)
+	DISK=(--table $TABLE --partition $PARTITION $DSK)
 	[ -z $DIF ] || DISK+=(--diff $DIF)
 }
 remove() {
@@ -33,10 +36,10 @@ prefuse() {
 	if ! [ -c /dev/fuse ]; then
 		exit 77
 	fi
-	$FATX --as fuse ${DISK[@]} $MNT/ $1 2>&1 &
+	$FATX --as fuse -f ${DISK[@]} $MNT/ $1 &
 	FUSE=$!
 	count=0
-	while ! `df $MNT | tail -n1 | cut -f 1 -d\  | grep -q fatx`; do
+	while ! `df $MNT | grep -q fatx`; do
 		sleep 1
 		let count++
 		if [ "$1" == "" -a $((count)) == $TIMEOUT ]; then
@@ -81,7 +84,7 @@ close() {
 	if ! [ -z $DIF ]; then
 		check
 	fi
-	[ -e $DSK ] && rm $DSK
+	#[ -e $DSK ] && rm $DSK
 	[ -z $DIF ] || ([ -e $DIF ] && rm $DIF)
 	[ -z $REF ] || ([ -e $REF ] && rm $REF)
 	echo -n
@@ -89,7 +92,7 @@ close() {
 
 mkfs1() {
 	echo Mkfs: make disk:
-	$FATX --as mkfs -y ${DISK[@]} 2>&1
+	$FATX --as mkfs -y ${DISK[@]}
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -100,7 +103,7 @@ mkfs1() {
 fuse1() {
 	echo Fuse: simple file creation:
 	prefuse
-	cp $FBIN $MNT
+	cp $FBIN $MNT/fatx
 	cmp -b $FBIN $MNT/fatx
 	if [ $? != 0 ]; then
 		echo "### Test KO"
@@ -375,7 +378,7 @@ fuse13() {
 }
 fsck1() {
 	echo Fsck: sanity check:
-	$FATX --as fsck -nv ${DISK[@]} 2>&1
+	$FATX --as fsck -nv ${DISK[@]}
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -391,7 +394,7 @@ fsck2() {
 		lsfat,	/test1; \
 		chcls,	/test1/test2,	3; \
 	"
-	$FATX --as fsck -av ${DISK[@]} 2>&1
+	$FATX --as fsck -av ${DISK[@]}
 }
 fsck3() {
 	echo Fsck: Conflicting entries:
@@ -402,11 +405,11 @@ fsck3() {
 		lsfat,	/test1/fatx; \
 		chcls,	/test1/test2,	9; \
 	"
-	$FATX --as fsck -av ${DISK[@]} 2>&1
+	$FATX --as fsck -av ${DISK[@]}
 }
 labl1() {
 	echo Label: check default name:
-	$FATX --as label ${DISK[@]} 2>&1
+	$FATX --as label ${DISK[@]}
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -419,7 +422,7 @@ labl2() {
 	prefuse
 	rm $MNT/name.txt
 	remfuse
-	$FATX --as label ${DISK[@]} 2>&1
+	$FATX --as label ${DISK[@]}
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -429,7 +432,7 @@ labl2() {
 }
 labl3() {
 	echo Label: set label
-	$FATX --as label ${DISK[@]} disk 2>&1
+	$FATX --as label ${DISK[@]} disk
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -443,7 +446,7 @@ unrm1() {
 	cp $FBIN $MNT/tbff
 	rm $MNT/tbff
 	remfuse
-	$FATX --as unrm -y ${DISK[@]} 2>&1
+	$FATX --as unrm -y ${DISK[@]}
 	if [ $? != 0 ]; then
 		echo "### Test KO", unrm failed
 		exit 1
@@ -467,7 +470,7 @@ unrm2() {
 	rm $MNT/test/tbff
 	rmdir $MNT/test
 	remfuse
-	$FATX --as unrm -y ${DISK[@]} 2>&1
+	$FATX --as unrm -y ${DISK[@]}
 	if [ $? != 0 ]; then
 		echo "### Test KO", unrm failed
 		exit 1
@@ -491,7 +494,7 @@ unrm3() {
 	cp $FBIN $MNT/test/tbff
 	rm $MNT/test/tbff
 	remfuse
-	$FATX --as unrm -ly ${DISK[@]} 2>&1
+	$FATX --as unrm -ly ${DISK[@]}
 	if [ $? != 0 ]; then
 		echo "### Test KO", unrm failed
 		exit 1
@@ -499,7 +502,7 @@ unrm3() {
 	test -e test/tbff && cmp -b $FBIN test/tbff
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
-		rm test/tbff && rmdir test
+		rm test/* && rmdir test
 	else
 		echo "### Test KO", file not recovered or files are different
 		exit 1
@@ -603,12 +606,3 @@ fi
 prepare
 mkfs1 && $testr && fsck1 && close && exit 0
 exit 1
-
-analyse.sh)
-	rm [0-9A-F]*.log >/dev/null 2>&1
-	IFS=$'\n'
-	sed -e 's/.\(# [^{]*{[0-9A-F]\{8,\}}\)/\n\1/g' >/tmp/$$$$
-	for pid in `cat /tmp/$$$$ | cut -f 2 -d\{ | cut -f 1 -d\} | grep ^[0-9A-F]*$ | sort | uniq`; do
-		grep $pid /tmp/$$$$ >$pid.log
-	done
-	rm /tmp/$$$$

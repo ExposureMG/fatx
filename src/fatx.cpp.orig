@@ -1,5 +1,5 @@
-/*
- *	FATX filesystem support (Xbox 360)
+﻿/*
+ *	FATX filesystem support
  *
  *  Copyright (C) 2012-2023 Christophe Duverger
  *
@@ -28,8 +28,13 @@ const char * const							def_label	= "XBOX";			// default label name
 fatx_context*				fatx_context::	fatxc		= nullptr;
 
 #ifndef NDEBUG
-inline void									dbglog(const string &s) {
-	console::write((format("# {%08X} %s") % std::this_thread::get_id() % s).str(), true);
+void										dbglog(const string &s) {
+	console::write((format("# %s{%08X}%s %s")
+		% ""
+		% pthread_self()
+		% ""
+		% s
+	).str(), true);
 }
 #endif
 
@@ -227,14 +232,14 @@ void						mymutx::		lock() {
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format(">>> Lock request [eXclu:%d %s]\n") % nb % nam).str());
+			dbglog((format(">>> Lock request [X:%d-%s]\n") % nb % nam).str());
 		#endif
-		upgrade_mutex::lock();
+		interprocess_upgradable_mutex::lock();
 		#if !defined NDEBUG && defined DBG_SEM
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format("	Lock done [eXclu:%d %s].\n") % nb % nam).str());
+			dbglog((format("	done [X:%d-%s].\n") % nb % nam).str());
 		#endif
 	}
 }
@@ -245,14 +250,14 @@ void						mymutx::		unlock() {
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format("<<< Lock release [eXclu:%d %s]\n") % nb % nam).str());
+			dbglog((format("<<< Lock release [X:%d-%s]\n") % nb % nam).str());
 		#endif
-		upgrade_mutex::unlock();
+		interprocess_upgradable_mutex::unlock();
 		#if !defined NDEBUG && defined DBG_SEM
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format("	Lock done [eXclu:%d %s].\n") % nb % nam).str());
+			dbglog((format("	done [X:%d-%s].\n") % nb % nam).str());
 		#endif
 	}
 }
@@ -263,14 +268,14 @@ void						mymutx::		lock_shared() {
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format(">>> Lock request [Share:%d %s]\n") % nb % nam).str());
+			dbglog((format(">>> Lock request [S:%d-%s]\n") % nb % nam).str());
 		#endif
-		upgrade_mutex::lock_shared();
+		interprocess_upgradable_mutex::lock_sharable();
 		#if !defined NDEBUG && defined DBG_SEM
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format("	Lock done [Share:%d %s].\n") % nb % nam).str());
+			dbglog((format("	done [S:%d-%s].\n") % nb % nam).str());
 		#endif
 	}
 }
@@ -281,14 +286,14 @@ void						mymutx::		unlock_shared() {
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format("<<< Lock release [Share:%d %s]\n") % nb % nam).str());
+			dbglog((format("<<< Lock release [S:%d-%s]\n") % nb % nam).str());
 		#endif
-		upgrade_mutex::unlock_shared();
+		interprocess_upgradable_mutex::unlock_sharable();
 		#if !defined NDEBUG && defined DBG_SEM
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format("	Lock done [Share:%d %s].\n") % nb % nam).str());
+			dbglog((format("	done [S:%d-%s].\n") % nb % nam).str());
 		#endif
 	}
 }
@@ -472,12 +477,12 @@ int							frontend::		setup() {
 	if(prog != fuse && prog != fsck && prog != mkfs && prog != unrm && prog != label) {
 		console::write(
 			"Invalid usage.\n"
-			"Please use a link to this executable named:\n"
+			"Please use link to this executable as:\n"
 			"- fusefatx\tto mount a filesystem with fuse\n"
 			"- mkfs.fatx\tto create a new filesystem\n"
 			"- fsck.fatx\tto check a filesystem\n"
 			"- unrm.fatx\tto try to recover deleted files\n"
-			"- label.fatx\tto display or change a filesystem label\n"
+			"- label.fatx\tto display or change filesystem label\n"
 		);
 		return EINVAL;
 	}
@@ -486,8 +491,8 @@ int							frontend::		setup() {
 		% (prog == fuse ? " mountpoint" : (prog == label ? " [label]" : ""))
 	).str());
 	visible.add_options()
-		("help,h", "display this help message")
-		("version", "display the version number")
+		("help,h", "produce help message")
+		("version", "produce version number")
 		("verbose,v", "verbose output")
 		("input,i", value<string>(), "set input device/file")
 		("diff", value<string>(), "set separate write file")
@@ -499,8 +504,8 @@ int							frontend::		setup() {
 			"\"gc\"  for game cache partition,\n"
 			"\"se1\" for sysext partition,\n"
 			"\"se2\" for sysext2 partition,\n"
-			"\"xdv\" for Xbox 360 dashboard partition,\n"
-			"\"x1\"  for original Xbox compatibility partition,\n"
+			"\"xdv\" for XBOX 360 dashboard volume partition,\n"
+			"\"x1\"  for XBOX 1 compatibility partition,\n"
 			"\"x2\"  for data partition (default)"
 		)
 		("table,b", value<string>()->default_value("hd"),
@@ -508,7 +513,7 @@ int							frontend::		setup() {
 			"\"file\" for plain file,\n"
 			"\"mu\"   for memory unit,\n"
 			"\"usb\"  for USB drive,\n"
-			"\"hd\"   for Xbox 360 retail hard disk (default),\n"
+			"\"hd\"   for XBOX 360 hard disk (default),\n"
 			"\"kit\"  for devkit hard disk"
 			// "\"kit\"  for DevKit HDD,\n"
 		 )
@@ -529,7 +534,7 @@ int							frontend::		setup() {
 	}
 	if(prog == label || prog == mkfs) {
 		visible.add_options()
-			("label,l", value<string>(), "set volume label")
+			("label,l", value<string>(), "set volume name")
 		;
 	}
 	if(prog == mkfs) {
@@ -1440,14 +1445,14 @@ int							fatxpar::		setup() {
 		{ "file",	"plain file" },
 		{ "mu",		"memory unit" },
 		{ "usb",	"USB drive" },
-		{ "hd",		"Xbox 360 retail hard disk" },
+		{ "hd",		"XBOX 360 hard disk" },
 		{ "kit",	"devkit hard disk" },
 		{ "sc",		"system cache" },
 		{ "gc",		"game cache" },
 		{ "se1",	"sysext" },
 		{ "se2",	"sysext 2" },
-		{ "xdv",	"Xbox 360 dashboard"},
-		{ "x1",		"original Xbox compatibility" },
+		{ "xdv",	"XBOX 360 dashboard volume"},
+		{ "x1",		"XBOX 1 compatibility" },
 		{ "x2",		"data" }
 	};
 	map<string, set<string>> cap;
@@ -1468,14 +1473,6 @@ int							fatxpar::		setup() {
 	}
 	if(cap.find("mu") != cap.end() && cap.find("mu")->second.size() == sch["mu"].size() && cap.find("file") != cap.end())
 		cap.erase("file");
-	#ifndef NDEBUG
-		dbglog("CAPACITY:\n");
-		for(auto i: cap) {
-			dbglog("  " + i.first + "\n");
-			for(auto j: i.second)
-				dbglog("    " + j + "\n");
-		}
-	#endif
 	if(
 		fatx_context::get()->mmi.offset != 0 &&
 		(fatx_context::get()->mmi.prog == frontend::mkfs || fatx_context::get()->dev.read(fatx_context::get()->mmi.offset).find(fsid, 0) == 0)
@@ -1537,7 +1534,7 @@ int							fatxpar::		setup() {
 	}
 	if(fatx_context::get()->mmi.size != 0) {
 		if(fatx_context::get()->mmi.offset == 0 && fatx_context::get()->mmi.table != "file")
-			console::write((format("Can't force size for a partition in %s table. Ignoring.\n") % names[fatx_context::get()->mmi.partition]).str(), true);
+			console::write((format("Can't force size for a partion in %s table. Ignoring.\n") % names[fatx_context::get()->mmi.partition]).str(), true);
 		else if(fatx_context::get()->mmi.size >= par_size)
 			console::write((format("Can't force a greater size than possible (limit is %d). Ignoring.\n") % par_size).str(), true);
 		else
@@ -1828,7 +1825,7 @@ void						dskmap::		erase() {
 void						dskmap::		gapcheck() {
 	authm.lock();
 	#ifndef NDEBUG
-		dbglog((format("Calculating free gaps out of %d FAT entries...\n") % fatx_context::get()->par.clus_fat).str());
+		dbglog((format("Calculating free gaps out of %d fat entries...\n") % fatx_context::get()->par.clus_fat).str());
 	#endif
 	freegaps.clear();
 	mapptr_t b = 0;
@@ -2265,9 +2262,9 @@ void						memmap::		printfat() {
 
 							// root entry constructor
 							entry::			entry() :
-	authb("Buff:/"),
-	authw("Data:/"),
-	authe("Entr:/"),
+	authb("B:/"),
+	authw("W:/"),
+	authe("E:/"),
 	entbuf(),
 	v_cptacc(0),
 	v_writeopened(fatx_context::get()->mmi.prog != frontend::fuse),
@@ -2316,7 +2313,8 @@ void						memmap::		printfat() {
 	v_loc(s),
 	v_parent(nullptr),
 	childs(),
-	v_areas() {
+	v_areas()
+{
 	v_status = (
 		// 0xFF or 0x00 on 2 firsts bytes = end of entries
 		(buf == nullptr || (buf[0] == EOD && buf[1] == EOD) || (buf[0] == 0 && buf[1] == 0)) ? end : (
@@ -2354,9 +2352,9 @@ void						memmap::		printfat() {
 		for(size_t i = 0; i < strlen(v_name); i++)
 			v_name[i] = (v_name[i] == EOD) ? '\0' : ((static_cast<unsigned char>(v_name[i]) < ' ') || static_cast<unsigned char>(v_name[i]) > '~') ? '~' : v_name[i];
 	}
-	authb.name("Buff:" + path());
-	authw.name("Data:" + path());
-	authe.name("Entr:" + path());
+	authb.name("B:" + path());
+	authw.name("W:" + path());
+	authe.name("E:" + path());
 }
 							// new entry constructor
 							entry::			entry(const string &n, filesize s, const bool d) :
@@ -2377,7 +2375,8 @@ void						memmap::		printfat() {
 	v_loc(0),
 	v_parent(nullptr),
 	childs(),
-	v_areas() {
+	v_areas()
+{
 	v_areas = make_shared<vareas>(fatx_context::get()->fat->alloc(d ? 1 : clsarithm::siz2cls(s)));
 	v_cluster = (!d && s == 0) ? FLK : v_areas->first();
 	if(v_cluster == 0)
@@ -2385,9 +2384,9 @@ void						memmap::		printfat() {
 	v_namesize		= static_cast<uint8_t>((n.length() <= name_size) ? n.length() : name_size);
 	memset			(v_name, '\0', name_size + 1);
 	strncpy			(v_name, &n[0], v_namesize);
-	authb.name("Buff:" + string(v_name));
-	authw.name("Data:" + string(v_name));
-	authe.name("Entr:" + string(v_name));
+	authb.name("B:" + string(v_name));
+	authw.name("W:" + string(v_name));
+	authe.name("E:" + string(v_name));
 	v_flags.dir		= d;
 	touch();
 	if(d && v_cluster != 0)
@@ -2423,7 +2422,7 @@ string						entry::			print() {
 string						entry::			path() {
 	return (
 		(cluster() == fatx_context::get()->par.root_clus) ? string(sepdir) : (
-		((parent() != nullptr) ? parent()->path() : (string(def_landf) + sepdir)) + name() + (flags().dir ? sepdir : "")
+		((parent() != nullptr) ? parent()->path() : (string("?") + sepdir)) + name() + (flags().dir ? sepdir : "")
 	));
 }
 void						entry::			opendir() {
@@ -2436,9 +2435,9 @@ void						entry::			opendir() {
 		for(size_t i = 0; i < fatx_context::get()->par.clus_size && !(marked && !fatx_context::get()->mmi.recover); i += ent_size) {
 			entry* ent = new entry(clsarithm::cls2ptr(clus_curr) + i, &buf[i]);
 			ent->parent(this);
-			ent->authb.name("Buff:" + ent->path());
-			ent->authw.name("Data:" + ent->path());
-			ent->authe.name("Entr:" + ent->path());
+			ent->authb.name("B:" + ent->path());
+			ent->authw.name("W:" + ent->path());
+			ent->authe.name("E:" + ent->path());
 			if(ent->status() == end)
 				marked = true;
 			if(ent->status() == invalid && !marked)
@@ -2999,7 +2998,7 @@ bool						entry::			analyse(pass_t step, const string &header)
 				s = fatx_context::get()->fat->getentry(c);
 		});
 		if(s != nullptr) {
-			console::write((format("Conflict between %sentry %s and %sentry %s (shares same blocks).")
+			console::write((format("Conflict between %sentry %s and %sentry %s (shares same blocs).")
 				% (status() == duplicate ? "duplicate " : "")
 				% (header + name())
 				% (s->status() == duplicate || s->status() == validupl ? "duplicate " : "")
@@ -3205,13 +3204,13 @@ size_t						entry::			bufread(char* buf, filesize offset, filesize s) {
 			return 0;
 		}
 		#ifndef NDEBUG
-			dbglog((format("--> new read buffer (%s at 0x%016X: %d)\n") % path() %  entbuf.get() % entbuf->size()).str());
+			dbglog((format("--> new read buffer (%s at 0x%08X: %d)\n") % path() %  entbuf.get() % entbuf->size()).str());
 		#endif
 	}
 	s = min<filesize>(s, entbuf->size());
 	memcpy(buf, &(*entbuf)[offset - entbuf->offset], s);
 	#ifndef NDEBUG
-		dbglog((format("--> read buffer (%s at 0x%016X(%d): %d(%d))\n") % path() %  entbuf.get() % entbuf->size() % (offset - entbuf->offset) % s).str());
+		dbglog((format("--> read buffer (%s at 0x%08X(%d): %d(%d))\n") % path() %  entbuf.get() % entbuf->size() % (offset - entbuf->offset) % s).str());
 	#endif
 	#if !defined NDEBUG && defined DBGBUFDMP
 		(*entbuf)(offset - entbuf->offset);
@@ -3286,13 +3285,13 @@ int							entry::			flush(bool l) {
 	if(entbuf) {
 		#ifndef NDEBUG
 		if(entbuf->touched)
-			dbglog((format("<-> flush buffer (%s at 0x%016X: %d)\n") % path() % entbuf.get() % entbuf->size()).str());
+			dbglog((format("<-> flush buffer (%s at 0x%08X: %d)\n") % path() % entbuf.get() % entbuf->size()).str());
 		else
-			dbglog((format("<-> no need to flush buffer (%s at 0x%016X: %d)\n") % path() % entbuf.get() % entbuf->size()).str());
+			dbglog((format("<-> no need to flush buffer (%s at 0x%08X: %d)\n") % path() % entbuf.get() % entbuf->size()).str());
 		#endif
 		if(entbuf->touched) {
 			if(writeopened()) {
-				res = data(entbuf.get()->data(), false, entbuf->offset, entbuf->size());
+				res = data(&(*entbuf.get())[0], false, entbuf->offset, entbuf->size());
 				if(!res)
 					entbuf.reset();
 			}
@@ -3972,16 +3971,16 @@ int											main(int argc, char* argv[]) {
 			idx->save();
 		}
 		if(!idx->resize(s) && !idx->data(reinterpret_cast<char*>(lab), false, 0, s))
-			console::write((format("Volume label has been changed to %s\n") % fatx_context::get()->par.par_label).str());
+			console::write((format("Volume name has been changed to %s\n") % fatx_context::get()->par.par_label).str());
 		else
-			console::write("Unable to change volume label.\n");
+			console::write("Unable to change volume name.\n");
 	}
 	if(mmi.prog == frontend::fsck) {
 		if(fatx_context::get()->par.par_label.empty())
-			console::write("Warning: volume has no label.\n");
+			console::write("Warning: volume has no name.\n");
 		if(mmi.verbose) {
 			console::write((format(
-					"Volume label:\t%s\n"
+					"Volume name:\t%s\n"
 					"Clusters size:\t%d\n"
 					"Total clusters:\t%d\n"
 					"Clusters free:\t%d\n"
@@ -3994,7 +3993,7 @@ int											main(int argc, char* argv[]) {
 		}
 	}
 	if(mmi.prog == frontend::label && mmi.volname.empty())
-		console::write((fatx_context::get()->par.par_label.empty() ? "No volume label." : fatx_context::get()->par.par_label) + "\n");
+		console::write((fatx_context::get()->par.par_label.empty() ? "No volume name." : fatx_context::get()->par.par_label) + "\n");
 	if(mmi.verbose) {
 		if(fatx_context::get()->dev.modified())
 			console::write("Changes have been made.\n");
