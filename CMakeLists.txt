@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0)
 project(fatx VERSION 1.16)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 
-set(SANITIZE false)
+set(SANITIZE true)
 
 include(FindBoost)
 include(CTest)
@@ -89,11 +89,20 @@ add_compile_options(
   -Wno-inline)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_options(
-    # -DDBG_INIT -DDBG_READ -DDBG_WRITE -DDBG_DIFF -DDBG_SEM
-    # -DDBGSEM=\"Data:/fatx\" -DDBG_BUFFER -DDBGBUFDMP=256 -DDBG_CACHE
-    # -DDBG_CACHDMP -DDBG_AREAS -DDBG_GUESS
-    -DDBGCR=32 -DDBGLIMIT=256
-    # -DDBG_FAT -DDBG_GAPS -DNO_WRITE -DNO_LOCK -DNO_CACHE
+    # -DDBG_INIT
+    -DDBG_READ
+    -DDBG_WRITE
+    # -DDBG_DIFF -DDBG_SEM -DDBGSEM=\"Data:/fatx\"
+    -DDBG_BUFFER
+    -DDBGBUFDMP=256
+    -DDBG_CACHE
+    -DDBG_CACHDMP
+    -DDBG_AREAS
+    # -DDBG_GUESS
+    -DDBGCR=32
+    -DDBGLIMIT=256
+    -DDBG_FAT
+    # -DDBG_GAPS -DNO_WRITE -DNO_LOCK -DNO_CACHE
   )
   if(SANITIZE)
     add_compile_options(

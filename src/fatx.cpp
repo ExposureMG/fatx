@@ -25,6 +25,10 @@ const char * const							def_landf	= "lost+found";		// default directory for los
 const char * const							def_fpre	= "FILE";			// default file prefix for lost & founds
 const char * const							def_label	= "XBOX";			// default label name
 
+const string								mutex_buff   = "Buffer:";
+const string								mutex_data   = "Data:";
+const string								mutex_entr   = "Entry:";
+
 fatx_context*				fatx_context::	fatxc		= nullptr;
 
 #ifndef NDEBUG
@@ -88,7 +92,7 @@ vareas						vareas::		sub(filesize s, filesize o) const {
 			ns			-= o - i.offset;
 			i.start		+= (o - i.offset) >> fatx_context::get()->par.clus_pow;
 		}
-		if(o + s - 1 > i.offset && o + s - 1 < i.offset + i.size - 1) {
+		if(o + s > i.offset && o + s < i.offset + i.size) {
 			ns			-= i.offset + i.size - o - s;
 			i.stop		-= (i.offset + i.size - o - s) >> fatx_context::get()->par.clus_pow;
 		}
@@ -168,7 +172,7 @@ string						vareas::		print() const {
 		if(siz < fatx_context::get()->par.clus_size) {
 			clear();
 			#if !defined NDEBUG && defined DBG_BUFFER
-				dbglog((format("... buffer: no way to alloc 0x%08X 0x%016X %d\n") % &(*this)[0] % offset % siz).str());
+				dbglog((format("... buffer: no way to alloc 0x%08X 0x%016X %d\n") % data() % offset % siz).str());
 			#endif
 			return;
 		}
@@ -189,7 +193,7 @@ void						buffer::		enlarge(const streamptr s) {
 	if(size() < s) {
 		clear();
 		#if !defined NDEBUG && defined DBG_BUFFER
-			dbglog((format("... buffer: no way to alloc 0x%08X 0x%016X %d\n") % &(*this)[0] % offset % s).str());
+			dbglog((format("... buffer: no way to alloc 0x%08X 0x%016X %d\n") % data() % offset % s).str());
 		#endif
 		return;
 	}
@@ -761,7 +765,7 @@ void						frontend::		parser() {
 				continue;
 			}
 			entry* n = new entry(i->substr(l + 1), 0, true);
-			entry* s = fatx_context::get()->root->find(&(i->substr(0, l))[0]);
+			entry* s = fatx_context::get()->root->find(i->substr(0, l).data());
 			if(s == nullptr) {
 				console::write("not found\n");
 				continue;
@@ -775,7 +779,7 @@ void						frontend::		parser() {
 				console::write("read-only\n");
 				continue;
 			}
-			entry* n = fatx_context::get()->root->find(&(*i)[0]);
+			entry* n = fatx_context::get()->root->find(i->data());
 			if(n == nullptr || !n->flags().dir) {
 				console::write("not found\n");
 				continue;
@@ -793,7 +797,7 @@ void						frontend::		parser() {
 				console::write("read-only\n");
 				continue;
 			}
-			entry* s = fatx_context::get()->root->find(&(*i++)[0]);
+			entry* s = fatx_context::get()->root->find(i++->data());
 			if(s == nullptr) {
 				console::write("not found\n");
 				continue;
@@ -803,7 +807,7 @@ void						frontend::		parser() {
 				console::write("syntax error\n");
 				continue;
 			}
-			entry* d = fatx_context::get()->root->find(&(i->substr(0, l))[0]);
+			entry* d = fatx_context::get()->root->find(i->substr(0, l).data());
 			if(d == nullptr) {
 				console::write("not found\n");
 				continue;
@@ -817,7 +821,7 @@ void						frontend::		parser() {
 		}
 		else if(*i == "rcp" && ++i != args.end() && !i->empty()) {
 			console::write("rcp:");
-			ifstream s(&(*i++)[0], ios::binary);
+			ifstream s(i++->data(), ios::binary);
 			if(!s) {
 				console::write("can't open\n");
 				continue;
@@ -830,7 +834,7 @@ void						frontend::		parser() {
 				console::write("syntax error\n");
 				continue;
 			}
-			entry* d = fatx_context::get()->root->find(&(i->substr(0, l))[0]);
+			entry* d = fatx_context::get()->root->find(i->substr(0, l).data());
 			if(d == nullptr) {
 				console::write("not found\n");
 				continue;
@@ -846,19 +850,19 @@ void						frontend::		parser() {
 		}
 		else if(*i == "lcp" && ++i != args.end() && !i->empty()) {
 			console::write("lcp:");
-			entry* s = fatx_context::get()->root->find(&(*i++)[0]);
+			entry* s = fatx_context::get()->root->find(i++->data());
 			if(s == nullptr) {
 				console::write("not found\n");
 				continue;
 			}
 			ifstream t;
-			t.open(&(*i)[0]);
+			t.open(i->data());
 			if(t) {
 				t.close();
 				console::write("local file exists\n");
 				continue;
 			}
-			ofstream d(&(*i)[0], ios::binary | ios::trunc);
+			ofstream d(i->data(), ios::binary | ios::trunc);
 			d.seekp(0, ios::beg);
 			string b(s->size(), '\0');
 			s->data(&b[0], true, 0, s->size());
@@ -873,12 +877,12 @@ void						frontend::		parser() {
 				console::write("read-only\n");
 				continue;
 			}
-			entry* n = fatx_context::get()->root->find(&(*i++)[0]);
+			entry* n = fatx_context::get()->root->find(i++->data());
 			if(n == nullptr) {
 				console::write("not found\n");
 				continue;
 			}
-			n->rename(&(*i)[0]);
+			n->rename(i->data());
 			console::write(n->path() + "\n");
 		}
 		else if(*i == "rm" && ++i != args.end() && !i->empty()) {
@@ -887,7 +891,7 @@ void						frontend::		parser() {
 				console::write("read-only\n");
 				continue;
 			}
-			entry* n = fatx_context::get()->root->find(&(*i)[0]);
+			entry* n = fatx_context::get()->root->find(i->data());
 			if(n == nullptr || n->flags().dir) {
 				console::write("not found\n");
 				continue;
@@ -897,7 +901,7 @@ void						frontend::		parser() {
 		}
 		else if(*i == "lsfat" && ++i != args.end() && !i->empty()) {
 			console::write(*i + ":");
-			entry* e = fatx_context::get()->root->find(&(*i)[0]);
+			entry* e = fatx_context::get()->root->find(i->data());
 			if(e != nullptr)
 				console::write(fatx_context::get()->fat->printchain(e->cluster()));
 			else
@@ -998,7 +1002,7 @@ void						frontend::		parser() {
 			console::write("\n");
 		}
 		else if(*i == "chcls" && ++i != args.end() && !i->empty()) {
-			entry* e = fatx_context::get()->root->find(&(*i)[0]);
+			entry* e = fatx_context::get()->root->find(i->data());
 			if(e != nullptr) {
 				console::write(*i + ":");
 				if(!writeable()) {
@@ -1497,7 +1501,7 @@ int							fatxpar::		setup() {
 		found = cap[fatx_context::get()->mmi.table].find(fatx_context::get()->mmi.partition) != cap[fatx_context::get()->mmi.table].end();
 	}
 	else if(fatx_context::get()->mmi.table == "kit") {
-		devheader dh(&fatx_context::get()->dev.read(0)[0]);
+		devheader dh(fatx_context::get()->dev.read(0).data());
 		if(dh.id != 0x00020000 && fatx_context::get()->mmi.prog == frontend::mkfs)
 			dh = devheader(ts);
 		if(fatx_context::get()->dev.read(dh.p2_start * blksize).find(fsid, 0) == 0) {
@@ -1546,7 +1550,7 @@ int							fatxpar::		setup() {
 	if(found) {
 		if(fatx_context::get()->mmi.verbose)
 			console::write((format("Using %s partition in %s table.\n") % names[fatx_context::get()->mmi.partition] % names[fatx_context::get()->mmi.table]).str());
-		bootsect	bs(&fatx_context::get()->dev.read(par_start)[0]);
+		bootsect	bs(fatx_context::get()->dev.read(par_start).data());
 		par_id		= bs.id;
 		root_clus	= bs.root;
 		clus_size	= static_cast<uint32_t>(blksize * (fatx_context::get()->mmi.clus_size ? fatx_context::get()->mmi.clus_size : (bs.spc == 0 || bs.spc > 0xFFFF) ? 1 : bs.spc));
@@ -2192,7 +2196,7 @@ void						memmap::		fatcheck() {
 						f->recover();
 					}
 					else {
-						entry* lf = fatx_context::get()->root->find(&(fatx_context::get()->mmi.lostfound)[0]);
+						entry* lf = fatx_context::get()->root->find(fatx_context::get()->mmi.lostfound.data());
 						if(lf == nullptr) {
 							// we first have to create lost+found directory
 							if(fatx_context::get()->root->addtodir((lf = new entry(fatx_context::get()->mmi.lostfound, 0, true)))) {
@@ -2204,7 +2208,7 @@ void						memmap::		fatcheck() {
 							// we find the latest file number
 							for(entry& e: lf->childs) {
 								unsigned int n;
-								if(sscanf(e.name(), &(string(def_fpre) + "%3d")[0], &n) == 1)
+								if(sscanf(e.name(), (string(def_fpre) + "%3d").data(), &n) == 1)
 									fatx_context::get()->mmi.filecount = max<unsigned int>(fatx_context::get()->mmi.filecount, n + 1);
 							}
 						}
@@ -2265,9 +2269,9 @@ void						memmap::		printfat() {
 
 							// root entry constructor
 							entry::			entry() :
-	authb("Buff:/"),
-	authw("Data:/"),
-	authe("Entr:/"),
+	authb(mutex_buff + "/"),
+	authw(mutex_data + "/"),
+	authe(mutex_entr + "/"),
 	entbuf(),
 	v_cptacc(0),
 	v_writeopened(fatx_context::get()->mmi.prog != frontend::fuse),
@@ -2354,9 +2358,9 @@ void						memmap::		printfat() {
 		for(size_t i = 0; i < strlen(v_name); i++)
 			v_name[i] = (v_name[i] == EOD) ? '\0' : ((static_cast<unsigned char>(v_name[i]) < ' ') || static_cast<unsigned char>(v_name[i]) > '~') ? '~' : v_name[i];
 	}
-	authb.name("Buff:" + path());
-	authw.name("Data:" + path());
-	authe.name("Entr:" + path());
+	authb.name(mutex_buff + path());
+	authw.name(mutex_data + path());
+	authe.name(mutex_entr + path());
 }
 							// new entry constructor
 							entry::			entry(const string &n, filesize s, const bool d) :
@@ -2385,9 +2389,9 @@ void						memmap::		printfat() {
 	v_namesize		= static_cast<uint8_t>((n.length() <= name_size) ? n.length() : name_size);
 	memset			(v_name, '\0', name_size + 1);
 	strncpy			(v_name, &n[0], v_namesize);
-	authb.name("Buff:" + string(v_name));
-	authw.name("Data:" + string(v_name));
-	authe.name("Entr:" + string(v_name));
+	authb.name(mutex_buff + string(v_name));
+	authw.name(mutex_data + string(v_name));
+	authe.name(mutex_entr + string(v_name));
 	v_flags.dir		= d;
 	touch();
 	if(d && v_cluster != 0)
@@ -2436,9 +2440,9 @@ void						entry::			opendir() {
 		for(size_t i = 0; i < fatx_context::get()->par.clus_size && !(marked && !fatx_context::get()->mmi.recover); i += ent_size) {
 			entry* ent = new entry(clsarithm::cls2ptr(clus_curr) + i, &buf[i]);
 			ent->parent(this);
-			ent->authb.name("Buff:" + ent->path());
-			ent->authw.name("Data:" + ent->path());
-			ent->authe.name("Entr:" + ent->path());
+			ent->authb.name(mutex_buff + ent->path());
+			ent->authw.name(mutex_data + ent->path());
+			ent->authe.name(mutex_entr + ent->path());
 			if(ent->status() == end)
 				marked = true;
 			if(ent->status() == invalid && !marked)
@@ -2733,8 +2737,8 @@ int							entry::			write() {
 		buf[0] = static_cast<char>((status() == delwdata || status() == delnodata) ? deleted_size : strlen(name()));
 		flags().write(&buf[1]);
 		memcpy(&buf[2], name(), name_size);
-		memcpy(&buf[0x2C], &byte_order<4>::litend(static_cast<byte_order<4>::value_type>(cluster()))[0], 4);
-		memcpy(&buf[0x30], &byte_order<4>::litend(static_cast<byte_order<4>::value_type>(size()))[0], 4);
+		memcpy(&buf[0x2C], byte_order<4>::litend(static_cast<byte_order<4>::value_type>(cluster())).data(), 4);
+		memcpy(&buf[0x30], byte_order<4>::litend(static_cast<byte_order<4>::value_type>(size())).data(), 4);
 		creation().write(reinterpret_cast<unsigned char*>(&buf[0x34]));
 		access().write(reinterpret_cast<unsigned char*>(&buf[0x38]));
 		update().write(reinterpret_cast<unsigned char*>(&buf[0x3C]));
@@ -2761,7 +2765,7 @@ int							entry::			rename(const char* n) {
 		return 0;
 	if(nstr.rfind(sepdir, nstr.size()) != string::npos) {
 		assert(parent() != nullptr);
-		entry* newpar = fatx_context::get()->root->find(&nstr.substr(0, nstr.rfind(sepdir, nstr.size()))[0]);
+		entry* newpar = fatx_context::get()->root->find(nstr.substr(0, nstr.rfind(sepdir, nstr.size())).data());
 		entry* oldpar = parent();
 		if(newpar == nullptr)
 			return ENOENT;
@@ -3167,7 +3171,7 @@ int							entry::			data(char* buf, bool r, filesize offset, filesize s) {
 		}
 		for(const area& i: areas()->sub(s, offset)) {
 			if(r)
-				memcpy(buf + i.offset - offset, &fatx_context::get()->dev.read(i.pointer, i.size)[0], i.size);
+				memcpy(buf + i.offset - offset, fatx_context::get()->dev.read(i.pointer, i.size).data(), i.size);
 			else {
 				if((res = fatx_context::get()->dev.write(i.pointer, string(buf + i.offset - offset, i.size))))
 					return res;
@@ -3197,7 +3201,7 @@ size_t						entry::			bufread(char* buf, filesize offset, filesize s) {
 	}
 	if(!entbuf) {
 		entbuf.reset(new buffer(offset, size() - offset));
-		if(entbuf->size() == 0 || data(&(*entbuf.get())[0], true, entbuf->offset, entbuf->size())) {
+		if(entbuf->size() == 0 || data(entbuf->data(), true, entbuf->offset, entbuf->size())) {
 			#ifndef NDEBUG
 				dbglog((format("**> alloc buffer or read operation failed (%s: 0x%08X %d)") % path() % offset % s).str());
 			#endif
@@ -3521,15 +3525,15 @@ static int									fatx_readdir	(const char* path, void* buf, fuse_fill_dir_t ff
 		return -ENOENT;
 	struct stat st;
 	int res;
-	if((res = fatx_getattr(&f->path()[0], &st)) != 0)
+	if((res = fatx_getattr(f->path().data(), &st)) != 0)
 		return res;
 	ff(buf, ".", &st, 0);
-	if((res = fatx_getattr(&f->parent()->path()[0], &st)) != 0)
+	if((res = fatx_getattr(f->parent()->path().data(), &st)) != 0)
 		return res;
 	ff(buf, "..", &st, 0);
 	for(entry& i: f->childs) {
 		if(i.status() == entry::valid || (fatx_context::get()->mmi.recover && i.status() == entry::delwdata)) {
-			if((res = fatx_getattr(&i.path()[0], &st)) != 0)
+			if((res = fatx_getattr(i.path().data(), &st)) != 0)
 				return res;
 			if(ff(buf, i.name(), &st, 0) != 0)
 				return -EBADF;
@@ -3563,7 +3567,7 @@ static int									fatx_create		(const char* path, mode_t mode) {
 		delete n;
 		return -ENOSPC;
 	}
-	entry* s = fatx_context::get()->root->find(&(p.substr(0, l))[0]);
+	entry* s = fatx_context::get()->root->find(p.substr(0, l).data());
 	if(s == nullptr) {
 		delete n;
 		return -ENOENT;

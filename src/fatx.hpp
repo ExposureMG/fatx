@@ -556,9 +556,9 @@ private:
 			id(i), spc(s), root(r) { }
 		void						write(char buf[blksize]) {
 			memcpy(&buf[0], &fsid[0], 4);
-			memcpy(&buf[4], &byte_order<4>::litend(id)[0], 4);
-			memcpy(&buf[8], &byte_order<4>::litend(spc)[0], 4);
-			memcpy(&buf[12], &byte_order<4>::litend(root)[0], 4);
+			memcpy(&buf[4], byte_order<4>::litend(id).data(), 4);
+			memcpy(&buf[8], byte_order<4>::litend(spc).data(), 4);
+			memcpy(&buf[12], byte_order<4>::litend(root).data(), 4);
 		}
 	};
 	class							devheader {
@@ -584,11 +584,11 @@ private:
 			p1_start(0x005B3000),
 			p1_size(0x00080000) { }
 		void						write(char buf[blksize]) {
-			memcpy(&buf[0], &byte_order<4>::litend(id)[0], 4);
-			memcpy(&buf[8], &byte_order<4>::litend(p2_start)[0], 4);
-			memcpy(&buf[12], &byte_order<4>::litend(p2_size)[0], 4);
-			memcpy(&buf[16], &byte_order<4>::litend(p1_start)[0], 4);
-			memcpy(&buf[20], &byte_order<4>::litend(p1_size)[0], 4);
+			memcpy(&buf[0], byte_order<4>::litend(id).data(), 4);
+			memcpy(&buf[8], byte_order<4>::litend(p2_start).data(), 4);
+			memcpy(&buf[12], byte_order<4>::litend(p2_size).data(), 4);
+			memcpy(&buf[16], byte_order<4>::litend(p1_start).data(), 4);
+			memcpy(&buf[20], byte_order<4>::litend(p1_size).data(), 4);
 		}
 	};
 public:

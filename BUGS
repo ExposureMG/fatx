@@ -1,113 +1,93 @@
 maybe ? tell me !
 
-# {7F92756D87C0} Fuse called with fusefatx /home/fatx/x2 -o ro -f -o allow_other
-:Ready.
-# {7F92715FF6C0} INIT
-# {7F92715FF6C0} GETATTR: /Cache
-# {7F92715FF6C0} -> entry '/Cache/' : ok, 0x00000004->0x0000845B (0) at 0x00000001347B9040[CLS:0x00000001]
-               (----D---, C=>12:00:12 23/12/2005 A=>12:00:12 23/12/2005 U=>12:00:12 23/12/2005, 0x05)
-# {7F92702F56C0} GETATTR: /Cache/NB_EQ363KV2D81M7.0000002000000
-# {7F92702F56C0} -> entry '/Cache/NB_EQ363KV2D81M7.0000002000000' : ok, 0x000028E6->0xFFFFFFFF (1) at 0x00000001347C5240[CLS:0x000000
-04]
-               (--------, C=>17:53:24 28/06/2020 A=>13:13:06 23/12/2005 U=>17:53:24 28/06/2020, 0x1E)
-# {7F92715FF6C0} OPEN: /Cache/NB_EQ363KV2D81M7.0000002000000 [r]
-# {7F92715FF6C0} GetArea: 1 subarea with 1 cluster [0x000028E6-0x000028E6]
-[0x000028E6-0x000028E6] off:0x0000000000000000 ptr:0x000000013EB4D000 len:16384
-# {7F92715FF6C0} SubArea: 1 subarea with 1 cluster [0x000028E6-0x000028E6]
-[0x000028E6-0x000028E6] off:0x0000000000000000 ptr:0x000000013EB4D000 len:16384
-# {7F92702F56C0} READ: /Cache/NB_EQ363KV2D81M7.0000002000000 (4096@0)
-# {7F92702F56C0} DATA: /Cache/NB_EQ363KV2D81M7.0000002000000(1) [R:0x00000000(1)]
-# {7F92702F56C0} SubArea: 1 subarea with 1 cluster [0x000028E6-0x000028E6]
-[0x000028E6-0x000028E6] off:0x0000000000000000 ptr:0x000000013EB4D000 len:16384
-# {7F92702F56C0} ->  read at 0x000000013EB4D000[CLS:0x000028E6] (16384) :
-# {7F92702F56C0}  00 FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFF
-FFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FF
-FFFFFF FFFFFFFF FFFFFFFF FFFFFFFF
-# {7F92702F56C0}  FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFF
-F FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFF
-FFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF
-# {7F92702F56C0}  FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFF
-F FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFF
-FFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF
-# {7F92702F56C0}  FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFF
-F FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFF
-FFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF
-# {7F92702F56C0}  FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFF
-F FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFF
-FFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF
-# {7F92702F56C0}  FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFF
-F FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFF
-FFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF
-# {7F92702F56C0}  FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFF
-F FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFF
-FFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF
-# {7F92702F56C0}  FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFF
-F FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFF
-FFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF
-# {7F92702F56C0}
+# {7F76D88F07C0} CREATE: /test.1
+# {7F76D88F07C0} ->  read at 0x0000000130EC5000[CLS:0x00000001] (32768) :
+# {7F76D88F07C0}  08 08 6E 61 6D 65 2E 74 78 74 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+# {7F76D88F07C0}  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 0A 56 96 85 85 56 96 85 87 56 96 85 87
+# {7F76D88F07C0}  E5 10 74 65 73 74 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+# {7F76D88F07C0}  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 00 00 00 00 56 96 85 87 56 96 87 45 56 96 87 45
+# {7F76D88F07C0}  0A 10 6C 6F 73 74 2B 66 6F 75 6E 64 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+# {7F76D88F07C0}  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 6F 00 00 00 00 56 96 85 98 56 96 85 98 56 96 85 98
+# {7F76D88F07C0}  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+# {7F76D88F07C0}  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+# {7F76D88F07C0}
+# {7F76D88F07C0} ->  write at 0x0000000130EC5100[CLS:0x00000001] (64) :
+# {7F76D88F07C0}  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+# {7F76D88F07C0}  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+# {7F76D88F07C0}
+# {7F76D88F07C0} ->  write at 0x0000000130EC50C0[CLS:0x00000001] (64) :
+# {7F76D88F07C0}  06 00 74 65 73 74 2E 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+# {7F76D88F07C0}  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 56 96 87 56 56 96 87 56 56 96 87 56
+# {7F76D88F07C0}
+# {7F76D88F07C0} CHMOD: /test.1
+# {7F76D88F07C0} ->  write at 0x0000000130EC50C0[CLS:0x00000001] (64) :
+# {7F76D88F07C0}  06 00 74 65 73 74 2E 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+# {7F76D88F07C0}  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 56 96 87 56 56 96 87 56 56 96 87 56
+# {7F76D88F07C0}
+# {7F76D88F07C0} OPEN: /test.1 [r]
+# {7F76D88F07C0} GETATTR: /test.1
+# {7F76D88F07C0} -> entry '/test.1' : ok, 0x00000000->0x00000000 (0) at 0x0000000130EC50C0[CLS:0x00000001]
+		(--------, C=>16:58:22 23/05/2023 A=>16:58:22 23/05/2023 U=>16:58:22 23/05/2023, 0x06)
+# {7F76D88F07C0} FLUSH: /test.1
+# {7F76D88F07C0} WRITE: /test.1 (1@0)
+# {7F76D88F07C0} RESIZE: /test.1 size:0->1
+# {7F76D88F07C0} XXX fatbuf: 0x00000070 (32768)
+# {7F76D88F07C0} ->  write at 0x0000000130EB10E0[FAT:0x00000070] (2) :# {7F76D88F07C0}  FF FF
+# {7F76D88F07C0} *** FAT alloc: 1 cluster starting at 0x00000070.
+# {7F76D88F07C0} SubArea: 1 subarea with 1 cluster [0x00000070-0x00000070]
+ [0x00000070-0x00000070] off:0x0000000000000000 ptr:0x000000013123D000 len:32768
+# {7F76D88F07C0} ->  write at 0x0000000130EC50C0[CLS:0x00000001] (64) :
+# {7F76D88F07C0}  06 00 74 65 73 74 2E 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+# {7F76D88F07C0}  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 70 00 00 00 01 56 96 87 56 56 96 87 56 56 96 87 56
+# {7F76D88F07C0}
+# {7F76D88F07C0} .oO buffer: 0x0x60400000b450 0x0000000000000000 1
+# {7F76D88F07C0} --> write buffer (/test.1 at 0x0x60400000b450(1): 0(1))
+# {7F76D88F07C0}  00
+# {7F76D88F07C0} FLUSH: /test.1
+# {7F76D88F07C0} <-> flush buffer (/test.1 at 0x0x0060400000b450: 1)
+# {7F76D88F07C0} DATA: /test.1(1) [W:0x00000000(1)]
+# {7F76D88F07C0} SubArea: 1 subarea with 1 cluster [0x00000070-0x00000070]
+ [0x00000070-0x00000070] off:0x0000000000000000 ptr:0x000000013123D000 len:32768
 =================================================================
-==7525==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60400005f940 at pc 0x7f927507174f bp 0x7f92702f3960 sp 0x7f92702f3
-120
-WRITE of size 16384 at 0x60400005f940 thread T2
-   #0 0x7f927507174e in __interceptor_memcpy (/lib64/libasan.so.8+0x7174e) (BuildId: a35c27b847507cffe1b01d21f87a730ec2df23ce)
-   #1 0x57c818 in entry::data(char*, bool, unsigned long, unsigned long) /home/john/coding/fatx-code/src/fatx.cpp:3169
-   #2 0x57e136 in entry::bufread(char*, unsigned long, unsigned long) /home/john/coding/fatx-code/src/fatx.cpp:3199
-   #3 0x587d42 in fatx_read /home/john/coding/fatx-code/src/fatx.cpp:3471
-   #4 0x7f92757f957e in fuse_fs_read_buf (/lib64/libfuse.so.2+0xe57e) (BuildId: a51cd679e0653f6d3df16cc084ab839db1433876)
-   #5 0x7f92757fd6f1  (/lib64/libfuse.so.2+0x126f1) (BuildId: a51cd679e0653f6d3df16cc084ab839db1433876)
-   #6 0x7f92757fddaa  (/lib64/libfuse.so.2+0x12daa) (BuildId: a51cd679e0653f6d3df16cc084ab839db1433876)
-   #7 0x7f92758099f7  (/lib64/libfuse.so.2+0x1e9f7) (BuildId: a51cd679e0653f6d3df16cc084ab839db1433876)
-   #8 0x7f92757fa9a3  (/lib64/libfuse.so.2+0xf9a3) (BuildId: a51cd679e0653f6d3df16cc084ab839db1433876)
-   #9 0x7f9274292ab3 in start_thread (/lib64/libc.so.6+0x8dab3) (BuildId: 9854a3cd243b5cfbf99999e26f7fbb65e62146c7)
-   #10 0x7f9274319b5f in __clone3 (/lib64/libc.so.6+0x114b5f) (BuildId: 9854a3cd243b5cfbf99999e26f7fbb65e62146c7)
+==73754==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60400000b480 at pc 0x7f76d8a70e46 bp 0x7ffd5f57fb80 sp 0x7ffd5f57f328
+READ of size 32768 at 0x60400000b480 thread T0
+    #0 0x7f76d8a70e45 in __interceptor_memcpy ../../../../src/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:899
+    #1 0x560b6bcdf6c6 in std::char_traits<char>::copy(char*, char const*, unsigned long) /usr/include/c++/12/bits/char_traits.h:431
+    #2 0x560b6bd0dfe6 in std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_S_copy(char*, char const*, unsigned long) /usr/include/c++/12/bits/basic_string.h:423
+    #3 0x560b6bd0df5c in std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_S_copy_chars(char*, char const*, char const*) /usr/include/c++/12/bits/basic_string.h:477
+    #4 0x560b6bd0dc80 in void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char const*>(char const*, char const*, std::forward_iterator_tag) /usr/include/c++/12/bits/basic_string.tcc:243
+    #5 0x560b6bd1a09d in std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::basic_string(char const*, unsigned long, std::allocator<char> const&) /usr/include/c++/12/bits/basic_string.h:620
+    #6 0x560b6bcb3f38 in entry::data(char*, bool, unsigned long, unsigned long) /home/baxter/Documents/dev/fatx/fatx.git/src/fatx.cpp:3176
+    #7 0x560b6bcbb3c6 in entry::flush(bool) /home/baxter/Documents/dev/fatx/fatx.git/src/fatx.cpp:3299
+    #8 0x560b6bcbf78f in fatx_flush /home/baxter/Documents/dev/fatx/fatx.git/src/fatx.cpp:3451
+    #9 0x7f76d90c2811  (/lib/x86_64-linux-gnu/libfuse.so.2+0xf811) (BuildId: 22cb4aa41b396b88a5bf595f6acf3be8775159e1)
+    #10 0x7f76d90c2bb3  (/lib/x86_64-linux-gnu/libfuse.so.2+0xfbb3) (BuildId: 22cb4aa41b396b88a5bf595f6acf3be8775159e1)
+    #11 0x7f76d90c9b55  (/lib/x86_64-linux-gnu/libfuse.so.2+0x16b55) (BuildId: 22cb4aa41b396b88a5bf595f6acf3be8775159e1)
+    #12 0x7f76d90ca352  (/lib/x86_64-linux-gnu/libfuse.so.2+0x17352) (BuildId: 22cb4aa41b396b88a5bf595f6acf3be8775159e1)
+    #13 0x7f76d90c6ef8 in fuse_session_loop (/lib/x86_64-linux-gnu/libfuse.so.2+0x13ef8) (BuildId: 22cb4aa41b396b88a5bf595f6acf3be8775159e1)
+    #14 0x7f76d90cfe96  (/lib/x86_64-linux-gnu/libfuse.so.2+0x1ce96) (BuildId: 22cb4aa41b396b88a5bf595f6acf3be8775159e1)
+    #15 0x560b6bccb9e4 in main /home/baxter/Documents/dev/fatx/fatx.git/src/fatx.cpp:3937
+    #16 0x7f76d7a23a8f in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #17 0x7f76d7a23b48 in __libc_start_main_impl ../csu/libc-start.c:360
+    #18 0x560b6bc09ec4 in _start (/home/baxter/tmp/fatx+0x42aec4) (BuildId: 76efc0b57c38de9b1b9481a87033d60250d25a18)
 
-0x60400005f940 is located 0 bytes after 48-byte region [0x60400005f910,0x60400005f940)
-allocated by thread T2 here:
-   #0 0x7f92750dcb88 in operator new(unsigned long) (/lib64/libasan.so.8+0xdcb88) (BuildId: a35c27b847507cffe1b01d21f87a730ec2df23ce
-)
-   #1 0x57dccf in entry::bufread(char*, unsigned long, unsigned long) /home/john/coding/fatx-code/src/fatx.cpp:3198
-   #2 0x587d42 in fatx_read /home/john/coding/fatx-code/src/fatx.cpp:3471
-   #3 0x7f92757f957e in fuse_fs_read_buf (/lib64/libfuse.so.2+0xe57e) (BuildId: a51cd679e0653f6d3df16cc084ab839db1433876)
+0x60400000b480 is located 0 bytes after 48-byte region [0x60400000b450,0x60400000b480)
+allocated by thread T0 here:
+    #0 0x7f76d8adf878 in operator new(unsigned long) ../../../../src/libsanitizer/asan/asan_new_delete.cpp:95
+    #1 0x560b6bcb8839 in entry::bufwrite(char const*, unsigned long, unsigned long) /home/baxter/Documents/dev/fatx/fatx.git/src/fatx.cpp:3263
+    #2 0x560b6bcc0b69 in fatx_write /home/baxter/Documents/dev/fatx/fatx.git/src/fatx.cpp:3491
+    #3 0x7f76d90c0869 in fuse_fs_write_buf (/lib/x86_64-linux-gnu/libfuse.so.2+0xd869) (BuildId: 22cb4aa41b396b88a5bf595f6acf3be8775159e1)
 
-Thread T2 created by T1 here:
-   #0 0x7f927504b6b6 in pthread_create (/lib64/libasan.so.8+0x4b6b6) (BuildId: a35c27b847507cffe1b01d21f87a730ec2df23ce)
-   #1 0x7f92757f6544  (/lib64/libfuse.so.2+0xb544) (BuildId: a51cd679e0653f6d3df16cc084ab839db1433876)
-
-Thread T1 created by T0 here:
-   #0 0x7f927504b6b6 in pthread_create (/lib64/libasan.so.8+0x4b6b6) (BuildId: a35c27b847507cffe1b01d21f87a730ec2df23ce)
-   #1 0x7f92757f6544  (/lib64/libfuse.so.2+0xb544) (BuildId: a51cd679e0653f6d3df16cc084ab839db1433876)
-
-SUMMARY: AddressSanitizer: heap-buffer-overflow (/lib64/libasan.so.8+0x7174e) (BuildId: a35c27b847507cffe1b01d21f87a730ec2df23ce) in
-__interceptor_memcpy
+SUMMARY: AddressSanitizer: heap-buffer-overflow ../../../../src/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:899 in __interceptor_memcpy
 Shadow bytes around the buggy address:
- 0x60400005f680: fa fa 00 00 00 00 06 fa fa fa fa fa fa fa fa fa
- 0x60400005f700: fa fa fa fa fa fa fa fa fa fa 00 00 00 00 06 fa
- 0x60400005f780: fa fa fd fd fd fd fd fa fa fa 00 00 00 00 00 fa
- 0x60400005f800: fa fa fa fa fa fa fa fa fa fa fd fd fd fd fd fa
- 0x60400005f880: fa fa fd fd fd fd fd fa fa fa fd fd fd fd fd fa
-=>0x60400005f900: fa fa 00 00 00 00 00 00[fa]fa fd fd fd fd fd fa
- 0x60400005f980: fa fa fd fd fd fd fd fa fa fa fd fd fd fd fd fa
- 0x60400005fa00: fa fa fd fd fd fd fd fa fa fa fd fd fd fd fd fa
- 0x60400005fa80: fa fa fd fd fd fd fd fa fa fa 00 00 00 00 00 00
- 0x60400005fb00: fa fa fd fd fd fd fd fa fa fa fd fd fd fd fd fa
- 0x60400005fb80: fa fa fd fd fd fd fd fa fa fa 00 00 00 00 00 00
-Shadow byte legend (one shadow byte represents 8 application bytes):
- Addressable:           00
- Partially addressable: 01 02 03 04 05 06 07
- Heap left redzone:       fa
- Freed heap region:       fd
- Stack left redzone:      f1
- Stack mid redzone:       f2
- Stack right redzone:     f3
- Stack after return:      f5
- Stack use after scope:   f8
- Global redzone:          f9
- Global init order:       f6
- Poisoned by user:        f7
- Container overflow:      fc
- Array cookie:            ac
- Intra object redzone:    bb
- ASan internal:           fe
- Left alloca redzone:     ca
- Right alloca redzone:    cb
-==7525==ABORTING``
+  0x60400000b200: fa fa fd fd fd fd fd fd fa fa fd fd fd fd fd fa
+  0x60400000b280: fa fa fd fd fd fd fd fa fa fa fd fd fd fd fd fa
+  0x60400000b300: fa fa fd fd fd fd fd fa fa fa 00 00 00 00 00 fa
+  0x60400000b380: fa fa 00 00 00 00 00 fa fa fa fd fd fd fd fd fa
+  0x60400000b400: fa fa fd fd fd fd fd fa fa fa 00 00 00 00 00 00
+=>0x60400000b480:[fa]fa fd fd fd fd fd fd fa fa fd fd fd fd fd fa
+  0x60400000b500: fa fa fd fd fd fd fd fa fa fa fd fd fd fd fd fa
+  0x60400000b580: fa fa fd fd fd fd fd fa fa fa fd fd fd fd fd fa
+  0x60400000b600: fa fa 00 00 00 00 00 fa fa fa fa fa fa fa fa fa
+  0x60400000b680: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x60400000b700: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
