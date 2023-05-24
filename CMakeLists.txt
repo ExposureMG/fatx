@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0)
 project(fatx VERSION 1.16)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 
-set(SANITIZE true)
+set(SANITIZE false)
 
 include(FindBoost)
 include(CTest)
