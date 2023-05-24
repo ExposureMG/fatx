@@ -4,6 +4,7 @@ fatx (1.16) unstable; urgency=low
   corrections due to more restrictive compiler options
   corrections to remove some memory leaks
   corrections of bugs in tests
+  corrected one byte file crash
   unrm with --local rebuilds directory structure
   corrections of bugs in partitions and partition tables
   INSTALL file modified for cmake instructions
