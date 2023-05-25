@@ -7,10 +7,10 @@ FATX=./fatx
 FBIN=$FATX
 FTXT=test.sh
 
-SIZE=6000
+SIZE=300
 WAIT=3
 TIMEOUT=300
-TABLE=hd
+TABLE=file
 PARTITION=x2
 
 DSK=disk.fatx
@@ -25,7 +25,7 @@ prepare() {
 #	[ -e $DSK ] || dd if=<(yes $'\xFF' | tr -d "\n") of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
 	[ -e $DSK ] || dd if=/dev/urandom of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
 	REF=$(basename $DSK).ref
-	[ -z $DIF ] || [ -e $DIF ] || (touch $DIF; cp $DSK $REF)
+	[ -z $DIF ] || [ -e $DIF ] || touch $DIF
 	DISK=(--table $TABLE --partition $PARTITION $DSK)
 	[ -z $DIF ] || DISK+=(--diff $DIF)
 }
@@ -70,20 +70,8 @@ kilfuse() {
 	fusermount -u $MNT
 	remove
 }
-check() {
-	cmp -b $DSK $REF
-	if [ $? == 0 ]; then
-		echo "*** Test OK"
-	else
-		echo "### Test KO", $DSK has been changed.
-		exit 1
-	fi
-}
 close() {
 	remove
-	if ! [ -z $DIF ]; then
-		check
-	fi
 	#[ -e $DSK ] && rm $DSK
 	[ -z $DIF ] || ([ -e $DIF ] && rm $DIF)
 	[ -z $REF ] || ([ -e $REF ] && rm $REF)

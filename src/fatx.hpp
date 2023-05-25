@@ -37,6 +37,7 @@
  *	-D DBGLIMIT=x	to limit to x bytes the printing of read/write
  *	-D DBG_FAT		to print the FAT
  *	-D DBG_GAPS		to print gaps
+ *	-D DBG_SPLICE	to print splice informations
  *	-D NO_WRITE		to fake writing but no modification is done
  *	-D NO_CACHE		to disable FAT cache
  *	-D NO_SPLICE	to disable splice calls by fuse
@@ -710,9 +711,9 @@ public:
 };
 class								entry : boost::noncopyable {
 private:
-	mymutx							authb;
-	mymutx							authw;
-	mymutx							authe;
+	mymutx							mux_B;
+	mymutx							mux_D;
+	mymutx							mux_E;
 	ptr_buffer						entbuf;
 
 	void							opendir();
@@ -739,16 +740,16 @@ public:
 private:
 	template<class T>
 	T								protected_read(T r) {
-		authe.lock_shared();
+		mux_E.lock_shared();
 		T res = r;
-		authe.unlock_shared();
+		mux_E.unlock_shared();
 		return res;
 	}
 	template<class T>
 	void							protected_write(T& r, const T &v) {
-		authe.lock();
+		mux_E.lock();
 		r = v;
-		authe.unlock();
+		mux_E.unlock();
 	}
 private:
 	char							v_name[name_size + 1];
@@ -757,9 +758,9 @@ public:
 		return protected_read<const char* const>(v_name);
 	}
 	void							name(const char* a) {
-		authe.lock();
+		mux_E.lock();
 		strncpy(v_name, a, name_size);
-		authe.unlock();
+		mux_E.unlock();
 	}
 #define PROTECTED_VAR(name, type, cref) \
 private: \

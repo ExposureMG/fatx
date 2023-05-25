@@ -2269,9 +2269,9 @@ void						memmap::		printfat() {
 
 							// root entry constructor
 							entry::			entry() :
-	authb(mutex_buff + "/"),
-	authw(mutex_data + "/"),
-	authe(mutex_entr + "/"),
+	mux_B(mutex_buff + "/"),
+	mux_D(mutex_data + "/"),
+	mux_E(mutex_entr + "/"),
 	entbuf(),
 	v_cptacc(0),
 	v_writeopened(fatx_context::get()->mmi.prog != frontend::fuse),
@@ -2303,9 +2303,9 @@ void						memmap::		printfat() {
 }
 							// existing entry constructor
 							entry::			entry(streamptr s, const char buf[ent_size]) :
-	authb(),
-	authw(),
-	authe(),
+	mux_B(),
+	mux_D(),
+	mux_E(),
 	entbuf(),
 	v_cptacc(0),
 	v_writeopened(fatx_context::get()->mmi.prog != frontend::fuse),
@@ -2358,15 +2358,15 @@ void						memmap::		printfat() {
 		for(size_t i = 0; i < strlen(v_name); i++)
 			v_name[i] = (v_name[i] == EOD) ? '\0' : ((static_cast<unsigned char>(v_name[i]) < ' ') || static_cast<unsigned char>(v_name[i]) > '~') ? '~' : v_name[i];
 	}
-	authb.name(mutex_buff + path());
-	authw.name(mutex_data + path());
-	authe.name(mutex_entr + path());
+	mux_B.name(mutex_buff + path());
+	mux_D.name(mutex_data + path());
+	mux_E.name(mutex_entr + path());
 }
 							// new entry constructor
 							entry::			entry(const string &n, filesize s, const bool d) :
-	authb(),
-	authw(),
-	authe(),
+	mux_B(),
+	mux_D(),
+	mux_E(),
 	entbuf(),
 	v_cptacc(0),
 	v_writeopened(fatx_context::get()->mmi.prog != frontend::fuse),
@@ -2389,9 +2389,9 @@ void						memmap::		printfat() {
 	v_namesize		= static_cast<uint8_t>((n.length() <= name_size) ? n.length() : name_size);
 	memset			(v_name, '\0', name_size + 1);
 	strncpy			(v_name, &n[0], v_namesize);
-	authb.name(mutex_buff + string(v_name));
-	authw.name(mutex_data + string(v_name));
-	authe.name(mutex_entr + string(v_name));
+	mux_B.name(mutex_buff + string(v_name));
+	mux_D.name(mutex_data + string(v_name));
+	mux_E.name(mutex_entr + string(v_name));
 	v_flags.dir		= d;
 	touch();
 	if(d && v_cluster != 0)
@@ -2399,12 +2399,12 @@ void						memmap::		printfat() {
 }
 							entry::			~entry() {
 	flush(false);
-	authw.lock();
+	mux_D.lock();
 	entbuf.reset();
 	childs.clear();
 	v_parent = nullptr;
 	v_areas.reset();
-	authw.unlock();
+	mux_D.unlock();
 }
 
 #ifndef NDEBUG
@@ -2440,9 +2440,9 @@ void						entry::			opendir() {
 		for(size_t i = 0; i < fatx_context::get()->par.clus_size && !(marked && !fatx_context::get()->mmi.recover); i += ent_size) {
 			entry* ent = new entry(clsarithm::cls2ptr(clus_curr) + i, &buf[i]);
 			ent->parent(this);
-			ent->authb.name(mutex_buff + ent->path());
-			ent->authw.name(mutex_data + ent->path());
-			ent->authe.name(mutex_entr + ent->path());
+			ent->mux_B.name(mutex_buff + ent->path());
+			ent->mux_D.name(mutex_data + ent->path());
+			ent->mux_E.name(mutex_entr + ent->path());
 			if(ent->status() == end)
 				marked = true;
 			if(ent->status() == invalid && !marked)
@@ -2463,7 +2463,7 @@ void						entry::			opendir() {
 				dbglog(ent->print());
 			#endif
 			if(ent->status() == valid) {
-				authe.lock_shared();
+				mux_E.lock_shared();
 				for(entry& e: childs) {
 					if(e.status() == valid && ent->namesize() == e.namesize() && strncmp(ent->name(), e.name(), ent->namesize()) == 0) {
 						// duplicate reference case
@@ -2474,7 +2474,7 @@ void						entry::			opendir() {
 						break;
 					}
 				}
-				authe.unlock_shared();
+				mux_E.unlock_shared();
 			}
 			if(ent->flags().dir) {
 				bool del = false;
@@ -2509,16 +2509,16 @@ void						entry::			opendir() {
 				if(ent == nullptr)
 					continue;
 			}
-			authe.lock();
+			mux_E.lock();
 			childs.push_back(ent);
-			authe.unlock();
+			mux_E.unlock();
 			ent = nullptr;
-			authe.lock_shared();
+			mux_E.lock_shared();
 			if(childs.back().flags().dir && childs.back().status() != delnodata) {
 				// go one step deep
 				childs.back().opendir();
 			}
-			authe.unlock_shared();
+			mux_E.unlock_shared();
 		}
 		if(!marked && fatx_context::get()->fat->read(clus_curr) == EOC)
 			marked = true;
@@ -2559,25 +2559,25 @@ void						entry::			closedir() {
 		}
 		else {
 			console::write(" Closing.\n", fatx_context::get()->mmi.dialog);
-			authe.lock();
+			mux_E.lock();
 			entry(j).write();
-			authe.unlock();
+			mux_E.unlock();
 		}
 	}
 }
 int							entry::			addtodir(entry* e) {
 	if(e == nullptr || !flags().dir || cluster() == 0 || (e->flags().dir && e->cluster() == 0))
 		return EFAULT;
-	authw.lock();
-	authe.lock_shared();
+	mux_D.lock();
+	mux_E.lock_shared();
 	for(entry& i: childs) {
 		if(i.namesize() == e->namesize() && strncmp(i.name(), e->name(), i.namesize()) == 0) {
-			authe.unlock_shared();
-			authw.unlock();
+			mux_E.unlock_shared();
+			mux_D.unlock();
 			return EEXIST;
 		}
 	}
-	authe.unlock_shared();
+	mux_E.unlock_shared();
 	streamptr endp = 0;
 	streamptr del = 0;
 	for(clusptr i = cluster(); endp == 0 && i != EOC && i != FLK; i = fatx_context::get()->fat->read(i)) {
@@ -2600,9 +2600,9 @@ int							entry::			addtodir(entry* e) {
 			(endp + ent_size - fatx_context::get()->par.root_start)
 		) {
 			// we must mark the end of entries
-			authe.lock();
+			mux_E.lock();
 			entry(e->loc() + ent_size).write();
-			authe.unlock();
+			mux_E.unlock();
 		}
 	}
 	else {
@@ -2617,64 +2617,64 @@ int							entry::			addtodir(entry* e) {
 			if(!areas() || areas()->empty()) {
 				areas(make_shared<vareas>(fatx_context::get()->fat->getareas(cluster())));
 				if(areas()->empty()) {
-					authw.unlock();
+					mux_D.unlock();
 					return EFAULT;
 				}
 			}
 			int res = 0;
 			if((res = fatx_context::get()->fat->resize(areas(), areas()->nbcls() + 1))) {
-				authw.unlock();
+				mux_D.unlock();
 				return res;
 			}
 			e->loc(clsarithm::cls2ptr(areas()->last()));
 			e->status(entry::valid);
 			// we must mark the end of entries
-			authe.lock();
+			mux_E.lock();
 			entry(e->loc() + ent_size).write();
-			authe.unlock();
+			mux_E.unlock();
 		}
 	}
 	e->parent(this);
-	authe.lock();
+	mux_E.lock();
 	childs.push_back(e);
 	e->write();
-	authe.unlock();
+	mux_E.unlock();
 	touch(false, false, true);
 	int res = save();
-	authw.unlock();
+	mux_D.unlock();
 	return res;
 }
 void						entry::			remfrdir(entry* e, bool c) {
 	if((e->status() != valid && e->status() != duplicate) || e->flags().lab)
 		return;
 	if(c) {
-		authe.lock_shared();
+		mux_E.lock_shared();
 		for(entry& f: e->childs) {
-			authe.unlock_shared();
+			mux_E.unlock_shared();
 			e->remfrdir(&f);
-			authe.lock_shared();
+			mux_E.lock_shared();
 		}
-		authe.unlock_shared();
+		mux_E.unlock_shared();
 	}
-	authw.lock();
+	mux_D.lock();
 	if(e->cluster() != FLK)
 		fatx_context::get()->fat->freefat(e->cluster());
 	e->status(e->cluster() == FLK ? delnodata : delwdata);
-	authe.lock();
+	mux_E.lock();
 	e->write();
-	authe.unlock();
+	mux_E.unlock();
 	if(c) {
-		authe.lock_shared();
+		mux_E.lock_shared();
 		auto i = find_if(childs.begin(), childs.end(), [e] (entry& a) -> bool { return &a == e; });
 		assert(i != childs.end());
-		authe.unlock_shared();
-		authe.lock();
+		mux_E.unlock_shared();
+		mux_E.lock();
 		childs.release(i).release();
-		authe.unlock();
+		mux_E.unlock();
 	}
 	touch(false, false, true);
 	save();
-	authw.unlock();
+	mux_D.unlock();
 	return;
 }
 entry*						entry::			find(const char* path) {
@@ -2687,11 +2687,11 @@ entry*						entry::			find(const char* path) {
 	bool									found = true;
 	for (const string &d : dirs) {
 		found = false;
-		res->authe.lock_shared();
+		res->mux_E.lock_shared();
 		for(entry& e: res->childs) {
 			if(e.status() == entry::valid && ((fatx_context::get()->mmi.cutname) ? e.name() == d.substr(0, name_size) : e.name() == d)) {
 				found = true;
-				res->authe.unlock_shared();
+				res->mux_E.unlock_shared();
 				res	= &e;
 				break;
 			}
@@ -2700,14 +2700,14 @@ entry*						entry::			find(const char* path) {
 			for(entry& e: res->childs) {
 				if(e.name() == d.substr(0, name_size)) {
 					found = true;
-					res->authe.unlock_shared();
+					res->mux_E.unlock_shared();
 					res	= &e;
 					break;
 				}
 			}
 		}
 		if(!found) {
-			res->authe.unlock_shared();
+			res->mux_E.unlock_shared();
 			break;
 		}
 	}
@@ -2750,11 +2750,11 @@ int							entry::			save() {
 	if(parent() == this)
 		return 0;
 	assert(parent() != nullptr);
-	parent()->authw.lock();
-	// authe.lock();
+	parent()->mux_D.lock();
+	// mux_E.lock();
 	int res = write();
-	// authe.unlock();
-	parent()->authw.unlock();
+	// mux_E.unlock();
+	parent()->mux_D.unlock();
 	return res;
 }
 int							entry::			rename(const char* n) {
@@ -2770,19 +2770,19 @@ int							entry::			rename(const char* n) {
 		if(newpar == nullptr)
 			return ENOENT;
 		if(oldpar != newpar) {
-			oldpar->authw.lock();
+			oldpar->mux_D.lock();
 			status(delwdata);
-			oldpar->authe.lock_shared();
+			oldpar->mux_E.lock_shared();
 			auto i = find_if(oldpar->childs.begin(), oldpar->childs.end(), [this] (entry& a) -> bool { return &a == this; });
 			assert(i != oldpar->childs.end());
-			oldpar->authe.unlock_shared();
+			oldpar->mux_E.unlock_shared();
 			write();
-			oldpar->authe.lock();
+			oldpar->mux_E.lock();
 			auto me = oldpar->childs.release(i);
-			oldpar->authe.unlock();
+			oldpar->mux_E.unlock();
 			status(valid);
 			oldpar->touch(false, false, true);
-			oldpar->authw.unlock();
+			oldpar->mux_D.unlock();
 			int res = 0;
 			if((res = oldpar->save()))
 				return res;
@@ -3188,13 +3188,13 @@ size_t						entry::			bufread(char* buf, filesize offset, filesize s) {
 	s = min<filesize>(size(), offset + s) - offset;
 	if(offset >= size() || s == 0)
 		return 0;
-	authb.lock();
+	mux_B.lock();
 	if(entbuf && (offset < entbuf->offset || (offset + s) > (entbuf->offset + entbuf->size()))) {
 		if(flush(false)) {
 			#ifndef NDEBUG
 				dbglog((format("**> flush buffer failed (%s)") % path()).str());
 			#endif
-			authb.unlock();
+			mux_B.unlock();
 			return 0;
 		}
 		entbuf.reset();
@@ -3205,7 +3205,7 @@ size_t						entry::			bufread(char* buf, filesize offset, filesize s) {
 			#ifndef NDEBUG
 				dbglog((format("**> alloc buffer or read operation failed (%s: 0x%08X %d)") % path() % offset % s).str());
 			#endif
-			authb.unlock();
+			mux_B.unlock();
 			return 0;
 		}
 		#ifndef NDEBUG
@@ -3220,7 +3220,7 @@ size_t						entry::			bufread(char* buf, filesize offset, filesize s) {
 	#if !defined NDEBUG && defined DBGBUFDMP
 		(*entbuf)(offset - entbuf->offset);
 	#endif
-	authb.unlock();
+	mux_B.unlock();
 	return s;
 }
 size_t						entry::			bufwrite(const char* buf, filesize offset, filesize s) {
@@ -3230,12 +3230,12 @@ size_t						entry::			bufwrite(const char* buf, filesize offset, filesize s) {
 		#endif
 		return false;
 	}
-	authb.lock();
+	mux_B.lock();
 	if(size() < offset + s && resize(offset + s)) {
 		#ifndef NDEBUG
 			dbglog((format("**> file resize failed (%s: 0x%08X %d)") % path() % offset % s).str());
 		#endif
-		authb.unlock();
+		mux_B.unlock();
 		return 0;
 	}
 	int res = 0;
@@ -3255,7 +3255,7 @@ size_t						entry::			bufwrite(const char* buf, filesize offset, filesize s) {
 			#ifndef NDEBUG
 				dbglog((format("**> flush buffer failed (%s)") % path()).str());
 			#endif
-			authb.unlock();
+			mux_B.unlock();
 			return 0;
 		}
 	}
@@ -3265,7 +3265,7 @@ size_t						entry::			bufwrite(const char* buf, filesize offset, filesize s) {
 			#ifndef NDEBUG
 				dbglog((format("**> alloc buffer failed (%s: 0x%08X %d)") % path() % offset % s).str());
 			#endif
-			authb.unlock();
+			mux_B.unlock();
 			return 0;
 		}
 	}
@@ -3278,7 +3278,7 @@ size_t						entry::			bufwrite(const char* buf, filesize offset, filesize s) {
 	#if !defined NDEBUG && defined DBGBUFDMP
 		(*entbuf)(offset - entbuf->offset);
 	#endif
-	authb.unlock();
+	mux_B.unlock();
 	return s;
 }
 int							entry::			flush(bool l) {
@@ -3286,7 +3286,7 @@ int							entry::			flush(bool l) {
 		return 0;
 	int res = 0;
 	if(l)
-		authb.lock();
+		mux_B.lock();
 	if(entbuf) {
 		#ifndef NDEBUG
 		if(entbuf->touched)
@@ -3305,15 +3305,15 @@ int							entry::			flush(bool l) {
 		}
 	}
 	if(l)
-		authb.unlock();
+		mux_B.unlock();
 	return res;
 }
 void						entry::			open(bool w) {
 	if(!flags().dir) {
 		if(w)
-			authw.lock();
+			mux_D.lock();
 		else
-			authw.lock_shared();
+			mux_D.lock_shared();
 		if(!writeopened())
 			writeopened(w);
 		if(cptacc() == 0 && cluster() != 0 && size() != 0)
@@ -3331,15 +3331,15 @@ void						entry::			close(bool w) {
 		if(cptacc() == 0) {
 			areas(nullptr);
 			if(entbuf) {
-				authb.lock();
+				mux_B.lock();
 				entbuf.reset();
-				authb.unlock();
+				mux_B.unlock();
 			}
 		}
 		if(w)
-			authw.unlock();
+			mux_D.unlock();
 		else
-			authw.unlock_shared();
+			mux_D.unlock_shared();
 	}
 }
 bool						entry::			operator == (entry& b) {
@@ -3355,7 +3355,7 @@ bool						entry::			operator == (entry& b) {
 #ifndef NO_SPLICE
 struct fuse_bufvec*			entry::			getbufvec(streamptr offset, filesize s) {
 	vareas va = fatx_context::get()->fat->getareas(cluster()).sub(s, offset);
-	if(va.empty())
+	if(va.empty() || s == 0)
 		return nullptr;
 	struct fuse_bufvec *bufv2	= nullptr;
 	struct fuse_bufvec *bufv	= static_cast<struct fuse_bufvec *>(malloc(sizeof(struct fuse_bufvec)));
@@ -3711,7 +3711,7 @@ static int									fatx_read_buf	(const char* path, struct fuse_bufvec** bufp, s
 	if(f == nullptr)
 		f = fatx_context::get()->root->find(path);
 	if(offset >= off_t(f->size()) || size == 0) {
-		*bufp = new fuse_bufvec({1, 0, 0, { 0, fuse_buf_flags(0), nullptr, -1, 0 }});
+		*bufp = new fuse_bufvec({1, 0, 0, { { 0, fuse_buf_flags(0), nullptr, -1, 0 } }});
 		return 0;
 	}
 	size = min<filesize>(f->size(), static_cast<long unsigned int>(offset) + size) - static_cast<long unsigned int>(offset);
@@ -3721,7 +3721,7 @@ static int									fatx_read_buf	(const char* path, struct fuse_bufvec** bufp, s
 		void *buf = malloc(size);
 		if(buf == nullptr)
 			return -ENOMEM;
-		struct fuse_bufvec* bv = new fuse_bufvec({1, 0, 0, { size, fuse_buf_flags(0), buf, -1, 0 }});
+		struct fuse_bufvec* bv = new fuse_bufvec({1, 0, 0, { { size, fuse_buf_flags(0), buf, -1, 0 } }});
 		if(bv == nullptr) {
 			free(buf);
 			return -ENOMEM;
@@ -3763,7 +3763,7 @@ static int									fatx_write_buf	(const char* path, struct fuse_bufvec* buf, of
 		struct fuse_bufvec* dst = f->getbufvec(streamptr(offset), fuse_buf_size(buf));
 		if(dst == nullptr)
 			return -ENOMEM;
-		int res = int(fuse_buf_copy(dst, buf, fuse_buf_copy_flags(0)));
+		int res = int(fuse_buf_copy(dst, buf, FUSE_BUF_FORCE_SPLICE));
 		free(dst);
 		return res;
 	}
