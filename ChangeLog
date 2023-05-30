@@ -12,7 +12,7 @@ fatx (1.16) unstable; urgency=low
   --nolost and --nodate options are more explicit
   some wordings improvements thank's to John Veness
 
- -- Christophe Duverger <fatx@christopheduverger.fr>
+ -- Christophe Duverger <fatx@christopheduverger.fr> Tue, 30 May 2023 15:03:02 +0100
 
 fatx (1.15) unstable; urgency=low
 

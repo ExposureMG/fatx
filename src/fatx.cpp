@@ -1190,8 +1190,8 @@ bool					device::chgfile::	addseg(streamptr p, const string& buf) {
 
 							device::		device() :
 		io(nullptr), iod(nullptr),
-		#ifndef NO_FD
-		fd(nullptr), fdd(nullptr),
+		#ifndef NO_SPLICE
+		fd(-1),
 		#endif
 		tot_size(0), changes(false), authd("DEV"), chgf() {
 }
@@ -1206,13 +1206,14 @@ bool					device::chgfile::	addseg(streamptr p, const string& buf) {
 		delete iod;
 		iod = nullptr;
 	}
-	#ifndef NO_FD
-		if(fd)
-			fclose(fd);
-		fd = nullptr;
-		if(fdd)
-			fclose(fdd);
-		fdd = nullptr;
+	#ifndef NO_SPLICE
+		if(fd != -1) {
+			close(fd);
+			#if !defined NDEBUG && defined DBG_INIT
+				dbglog((format("File descriptor n°%d closed.\n") % fd).str());
+			#endif
+			fd = -1;
+		}
 	#endif
 }
 string						device::		read(streamptr p, size_t s)
@@ -1304,6 +1305,11 @@ int							device::		setup() {
 	if(io == nullptr || (!fatx_context::get()->mmi.diffile.empty() && iod == nullptr))
 		err = true;
 	else {
+		#ifndef NO_SPLICE
+			io->sync_with_stdio();
+			if(iod != nullptr)
+				iod->sync_with_stdio();
+		#endif
 		io->seekg(0);
 		err = err || !io->good();
 		io->seekg(0, ios::end);
@@ -1332,6 +1338,18 @@ int							device::		setup() {
 		if(iod != nullptr)
 			err = err || chgf.load(iod);
 	}
+	#ifndef NO_SPLICE
+		fd = open(fatx_context::get()->mmi.input.data(), O_LARGEFILE | (fatx_context::get()->mmi.writeable() && fatx_context::get()->mmi.diffile.empty() ? O_RDONLY : O_RDWR));
+		if(fd == -1)
+			err = true;
+		else {
+			err = err || lseek(fd, 0, SEEK_SET) == -1;
+			err = err || lseek(fd, 0, SEEK_END) == -1;
+		}
+		#if !defined NDEBUG && defined DBG_INIT
+			dbglog((format("File descriptor n°%d opened.\n") % fd).str());
+		#endif
+	#endif
 	if(err) {
 		if(io != nullptr) {
 			io->close();
@@ -1343,6 +1361,12 @@ int							device::		setup() {
 			delete iod;
 			iod = nullptr;
 		}
+		#ifndef NO_SPLICE
+			if(fd != -1) {
+				close(fd);
+				fd = -1;
+			}
+		#endif
 		console::write((format("Error opening %s%s for read%s\n")
 			% (fatx_context::get()->mmi.input)
 			% (fatx_context::get()->mmi.diffile.empty() ? "" : (":" + fatx_context::get()->mmi.diffile))
@@ -3374,7 +3398,7 @@ struct fuse_bufvec*			entry::			getbufvec(streamptr offset, filesize s) {
 		}
 		bufv->buf[bufv->count - 1].size		= i.size;
 		bufv->buf[bufv->count - 1].flags	= fuse_buf_flags(FUSE_BUF_IS_FD | FUSE_BUF_FD_SEEK);
-		bufv->buf[bufv->count - 1].fd		= fileno(fatx_context::get()->dev.getfd());
+		bufv->buf[bufv->count - 1].fd		= fatx_context::get()->dev.getfd();
 		bufv->buf[bufv->count - 1].mem		= nullptr;
 		bufv->buf[bufv->count - 1].pos		= off_t(i.pointer);
 	}
@@ -3763,7 +3787,7 @@ static int									fatx_write_buf	(const char* path, struct fuse_bufvec* buf, of
 		struct fuse_bufvec* dst = f->getbufvec(streamptr(offset), fuse_buf_size(buf));
 		if(dst == nullptr)
 			return -ENOMEM;
-		int res = int(fuse_buf_copy(dst, buf, FUSE_BUF_FORCE_SPLICE));
+		int res = int(fuse_buf_copy(dst, buf, FUSE_BUF_SPLICE_MOVE));
 		free(dst);
 		return res;
 	}

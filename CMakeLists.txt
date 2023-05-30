@@ -1,9 +1,16 @@
 cmake_minimum_required(VERSION 3.0)
-project(fatx VERSION 1.16 LANGUAGES C CXX)
+project(
+  fatx
+  VERSION 1.16
+  LANGUAGES C CXX)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
-if(CMAKE_BUILD_TYPE EQUAL "")
-  set(CMAKE_BUILD_TYPE "Release")
-endif(CMAKE_BUILD_TYPE EQUAL "")
+if(CMAKE_BUILD_TYPE STREQUAL "")
+  set(CMAKE_BUILD_TYPE
+      Release
+      CACHE STRING "Build type" FORCE)
+endif(CMAKE_BUILD_TYPE STREQUAL "")
+
+set(SANITIZE false)
 
 include(FindBoost)
 include(CTest)
@@ -90,78 +97,69 @@ add_compile_options(
   -Wno-inline)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_options(
-    -DDBG_INIT
-    -DDBG_READ
-    -DDBG_WRITE
-    # -DDBG_DIFF -DDBG_SEM -DDBGSEM=\"Data:/fatx\"
-    -DDBG_BUFFER
-    -DDBGBUFDMP=256
-    -DDBG_CACHE
-    -DDBG_CACHDMP
-    # -DDBG_AREAS -DDBG_GUESS
-    -DDBGCR=32
-    -DDBGLIMIT=256
-    -DDBG_FAT
-    -DDBG_GAPS
-    -DDBG_SPLICE
-    # -DNO_WRITE -DNO_LOCK -DNO_CACHE
+    # -DDBG_INIT -DDBG_READ -DDBG_WRITE -DDBG_DIFF -DDBG_SEM
+    # -DDBGSEM=\"Data:/fatx\" -DDBG_BUFFER -DDBGBUFDMP=256 -DDBG_CACHE
+    # -DDBG_CACHDMP -DDBG_AREAS -DDBG_GUESS -DDBGCR=32 -DDBGLIMIT=256 -DDBG_FAT
+    # -DDBG_GAPS -DNO_WRITE -DNO_LOCK -DNO_CACHE
   )
-  add_compile_options(
-    -fsanitize=address
-    -fsanitize=pointer-compare
-    -fsanitize=pointer-subtract
-    -fsanitize=leak
-    -fsanitize=undefined
-    -fsanitize=shift
-    -fsanitize=shift-exponent
-    -fsanitize=shift-base
-    -fsanitize=integer-divide-by-zero
-    -fsanitize=unreachable
-    -fsanitize=vla-bound
-    -fsanitize=null
-    -fsanitize=return
-    -fsanitize=signed-integer-overflow
-    -fsanitize=bounds
-    # -fsanitize=bounds-strict
-    -fsanitize=alignment
-    -fsanitize=object-size
-    -fsanitize=float-divide-by-zero
-    -fsanitize=float-cast-overflow
-    -fsanitize=nonnull-attribute
-    -fsanitize=returns-nonnull-attribute
-    -fsanitize=bool
-    -fsanitize=enum
-    -fsanitize=vptr
-    -fsanitize=pointer-overflow
-    --param=max-gcse-memory=256000
-    --param=max-vartrack-size=100000000)
-  add_link_options(
-    -fsanitize=address
-    -fsanitize=pointer-compare
-    -fsanitize=pointer-subtract
-    -fsanitize=leak
-    -fsanitize=undefined
-    -fsanitize=shift
-    -fsanitize=shift-exponent
-    -fsanitize=shift-base
-    -fsanitize=integer-divide-by-zero
-    -fsanitize=unreachable
-    -fsanitize=vla-bound
-    -fsanitize=null
-    -fsanitize=return
-    -fsanitize=signed-integer-overflow
-    -fsanitize=bounds
-    -fsanitize=bounds-strict
-    -fsanitize=alignment
-    -fsanitize=object-size
-    -fsanitize=float-divide-by-zero
-    -fsanitize=float-cast-overflow
-    -fsanitize=nonnull-attribute
-    -fsanitize=returns-nonnull-attribute
-    -fsanitize=bool
-    -fsanitize=enum
-    -fsanitize=vptr
-    -fsanitize=pointer-overflow)
+  if(SANITIZE)
+    add_compile_options(
+      -fsanitize=address
+      -fsanitize=pointer-compare
+      -fsanitize=pointer-subtract
+      -fsanitize=leak
+      -fsanitize=undefined
+      -fsanitize=shift
+      -fsanitize=shift-exponent
+      -fsanitize=shift-base
+      -fsanitize=integer-divide-by-zero
+      -fsanitize=unreachable
+      -fsanitize=vla-bound
+      -fsanitize=null
+      -fsanitize=return
+      -fsanitize=signed-integer-overflow
+      -fsanitize=bounds
+      # -fsanitize=bounds-strict
+      -fsanitize=alignment
+      -fsanitize=object-size
+      -fsanitize=float-divide-by-zero
+      -fsanitize=float-cast-overflow
+      -fsanitize=nonnull-attribute
+      -fsanitize=returns-nonnull-attribute
+      -fsanitize=bool
+      -fsanitize=enum
+      -fsanitize=vptr
+      -fsanitize=pointer-overflow
+      --param=max-gcse-memory=256000
+      --param=max-vartrack-size=100000000)
+    add_link_options(
+      -fsanitize=address
+      -fsanitize=pointer-compare
+      -fsanitize=pointer-subtract
+      -fsanitize=leak
+      -fsanitize=undefined
+      -fsanitize=shift
+      -fsanitize=shift-exponent
+      -fsanitize=shift-base
+      -fsanitize=integer-divide-by-zero
+      -fsanitize=unreachable
+      -fsanitize=vla-bound
+      -fsanitize=null
+      -fsanitize=return
+      -fsanitize=signed-integer-overflow
+      -fsanitize=bounds
+      -fsanitize=bounds-strict
+      -fsanitize=alignment
+      -fsanitize=object-size
+      -fsanitize=float-divide-by-zero
+      -fsanitize=float-cast-overflow
+      -fsanitize=nonnull-attribute
+      -fsanitize=returns-nonnull-attribute
+      -fsanitize=bool
+      -fsanitize=enum
+      -fsanitize=vptr
+      -fsanitize=pointer-overflow)
+  endif(SANITIZE)
 endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 
 add_executable(

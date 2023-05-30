@@ -37,7 +37,6 @@
  *	-D DBGLIMIT=x	to limit to x bytes the printing of read/write
  *	-D DBG_FAT		to print the FAT
  *	-D DBG_GAPS		to print gaps
- *	-D DBG_SPLICE	to print splice informations
  *	-D NO_WRITE		to fake writing but no modification is done
  *	-D NO_CACHE		to disable FAT cache
  *	-D NO_SPLICE	to disable splice calls by fuse
@@ -513,9 +512,8 @@ private:
 	};
 	fstream*						io;
 	fstream*						iod;
-	#ifndef NO_FD
-	FILE*							fd;
-	FILE*							fdd;
+	#ifndef NO_SPLICE
+	int								fd;
 	#endif
 	streamptr						tot_size;
 	bool							changes;
@@ -531,8 +529,8 @@ public:
 	bool							modified() const {
 		return changes;
 	}
-	#ifndef NO_FD
-	FILE*							getfd() const {
+	#ifndef NO_SPLICE
+	int 							getfd() const {
 		return fd;
 	}
 	#endif
