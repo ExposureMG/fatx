@@ -1,3 +1,9 @@
+fatx (1.17) unstable; urgency=low
+  USB drive correctly handled
+  False detection of files corrected
+
+ -- Christophe Duverger <fatx@christopheduverger.fr> Tue, 13 March 2024 12:00:02 +0100
+
 fatx (1.16) unstable; urgency=low
 
   production changed to cmake

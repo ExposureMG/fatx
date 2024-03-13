@@ -1,7 +1,7 @@
 /*
  *	FATX filesystem support (Xbox 360)
  *
- *  Copyright (C) 2012-2023 Christophe Duverger
+ *  Copyright (C) 2012-2024 Christophe Duverger
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -24,10 +24,13 @@ const char * const							fidx		= "name.txt";		// file used for label name
 const char * const							def_landf	= "lost+found";		// default directory for lost & founds
 const char * const							def_fpre	= "FILE";			// default file prefix for lost & founds
 const char * const							def_label	= "XBOX";			// default label name
+const char * const							usb_dir		= "Xbox360";		// USB drive directory
+const char * const							usb_data	= "Data";			// USB drive data file prefix
 
-const string								mutex_buff   = "Buffer:";
-const string								mutex_data   = "Data:";
-const string								mutex_entr   = "Entry:";
+
+const char * const							mutex_buff   = "Buffer:";
+const char * const							mutex_data   = "Data:";
+const char * const							mutex_entr   = "Entry:";
 
 fatx_context*				fatx_context::	fatxc		= nullptr;
 
@@ -514,7 +517,6 @@ int							frontend::		setup() {
 			"\"usb\"  for USB drive,\n"
 			"\"hd\"   for Xbox 360 retail hard disk (default),\n"
 			"\"kit\"  for devkit hard disk"
-			// "\"kit\"  for DevKit HDD,\n"
 		 )
 	;
 	if(prog == fuse) {
@@ -731,6 +733,10 @@ int							frontend::		setup() {
 			(format("mask\t\t%03o\n")		% mask).str()
 		);
 		return EPERM;
+	}
+	if(prog == mkfs && table == "usb") {
+		console::write("Can't make filesystem for USB drive.\n");
+		return EINVAL;
 	}
 	if(varmap.count("help") || !varmap.count("input") || (prog == fuse && !varmap.count("mount"))) {
 		ostringstream s;
@@ -1049,20 +1055,19 @@ void						frontend::		parser() {
 	}
 }
 
-bool					device::chgfile::	load(fstream* f) {
+bool					device::chgfile::	load() {
 	streamptr o = 0;
 	streamptr p;
 	streamptr s;
-	while(f->seekg(static_cast<std::basic_istream<char>::off_type>(o), ios::beg), f->peek(), f->good()) {
-		if(!f->read(reinterpret_cast<char*>(&p), sizeof(p)))
+	while(iod.seekg(static_cast<std::basic_istream<char>::off_type>(o), ios::beg), iod.peek()) {
+		if(!iod.read(reinterpret_cast<char*>(&p), sizeof(p)))
 			return true;
-		if(!f->read(reinterpret_cast<char*>(&s), sizeof(s)) || s == 0)
+		if(!iod.read(reinterpret_cast<char*>(&s), sizeof(s)) || s == 0)
 			return true;
 		device::segment seg = { s, (o += 2 * sizeof(streamptr)) };
 		insert(make_pair(p, seg));
 		o += s;
 	}
-	iod = f;
 	#if !defined NDEBUG && defined DBG_INIT
 		dbglog((format("Diff file loaded %s\n") % (size() == 0 ? "(0 segment)." : (format("(%d segment%s):") % size() % (size() == 1 ? "" : "s")).str())).str());
 		for(auto i: *this)
@@ -1070,9 +1075,8 @@ bool					device::chgfile::	load(fstream* f) {
 	#endif
 	return false;
 }
-bool					device::chgfile::	read(streamptr p, const size_t s, string &buf) const
-{
-#if !defined NDEBUG && defined DBG_DIFF
+bool					device::chgfile::	read(streamptr p, const size_t s, string &buf) {
+	#if !defined NDEBUG && defined DBG_DIFF
 		dbglog((format("=>  Read diffile at 0x%016X(%d)\n") % p % s).str());
 	#endif
 	auto b = lower_bound(p);		// *b >= p
@@ -1103,8 +1107,8 @@ bool					device::chgfile::	read(streamptr p, const size_t s, string &buf) const
 			dbglog((format("... read diffile at 0x%016X [0x%016X(%d)]\n") % pos % (p + c) % siz).str());
 		#endif
 		bool status = false;
-		status = status || !iod->seekg(static_cast<std::basic_istream<char>::off_type>(pos), ios::beg);
-		status = status || !iod->read(&buf[c], static_cast<streamsize>(siz));
+		status = status || !iod.seekg(static_cast<std::basic_istream<char>::off_type>(pos), ios::beg);
+		status = status || !iod.read(&buf[c], static_cast<streamsize>(siz));
 		if(status) {
 			console::write((format("Can't read diffile at 0x%016X.\n") % p).str(), true);
 			return true;
@@ -1113,13 +1117,11 @@ bool					device::chgfile::	read(streamptr p, const size_t s, string &buf) const
 	}
 	return false;
 }
-bool					device::chgfile::	write(streamptr p, const string &buf)
-{
-#if !defined NDEBUG && defined DBG_DIFF
-	dbglog((format("=>  Write diffile at 0x%016X(%d)\n") % p % buf.size()).str());
-#endif
-		auto b
-		= lower_bound(p); // *b >= p
+bool					device::chgfile::	write(streamptr p, const string &buf) {
+	#if !defined NDEBUG && defined DBG_DIFF
+		dbglog((format("=>  Write diffile at 0x%016X(%d)\n") % p % buf.size()).str());
+	#endif
+	auto b = lower_bound(p); // *b >= p
 	if(b != begin()) {
 		b--;						// *b < p && *b + b->s > p
 		if(b->first + b->second.size <= p)
@@ -1150,8 +1152,8 @@ bool					device::chgfile::	write(streamptr p, const string &buf)
 			dbglog((format("... write diffile at 0x%016X [0x%016X(%d)]\n") % pos % l % siz).str());
 		#endif
 		bool status = false;
-		status = status || !iod->seekp(static_cast<std::basic_istream<char>::off_type>(pos), ios::beg);
-		status = status || !iod->write(&buf[l - p], static_cast<streamsize>(siz));
+		status = status || !iod.seekp(static_cast<std::basic_istream<char>::off_type>(pos), ios::beg);
+		status = status || !iod.write(&buf[l - p], static_cast<streamsize>(siz));
 		if(status) {
 			console::write((format("Can't write diffile at 0x%016X.\n") % p).str(), true);
 			return true;
@@ -1168,15 +1170,15 @@ bool					device::chgfile::	addseg(streamptr p, const string& buf) {
 	device::segment seg;
 	seg.size = s;
 	bool status = false;
-	iod->close();
-	iod->open(fatx_context::get()->mmi.diffile.data(), ios::binary | ios::out | ios::app);
+	iod.close();
+	iod.open(fatx_context::get()->mmi.diffile, ios::binary | ios::out | ios::app);
 	status = status || !iod;
-	status = status || !iod->write(reinterpret_cast<char*>(&p), sizeof(p));
-	status = status || !iod->write(reinterpret_cast<char*>(&s), sizeof(s));
-	seg.position = static_cast<streamptr>(iod->tellp());
-	status = status || !iod->write(&buf[0], static_cast<streamsize>(s));
-	iod->close();
-	iod->open(fatx_context::get()->mmi.diffile.data(), ios::binary | ios::out | ios::in);
+	status = status || !iod.write(reinterpret_cast<char*>(&p), sizeof(p));
+	status = status || !iod.write(reinterpret_cast<char*>(&s), sizeof(s));
+	seg.position = static_cast<streamptr>(iod.tellp());
+	status = status || !iod.write(&buf[0], static_cast<streamsize>(s));
+	iod.close();
+	status = status || !(iod.open(fatx_context::get()->mmi.diffile, ios::binary | ios::out | ios::in), iod);
 	if(status) {
 		console::write((format("Can't add segment in diffile at 0x%016X.\n") % p).str(), true);
 		return true;
@@ -1189,62 +1191,63 @@ bool					device::chgfile::	addseg(streamptr p, const string& buf) {
 }
 
 							device::		device() :
-		io(nullptr), iod(nullptr),
-		#ifndef NO_SPLICE
-		fd(-1),
-		#endif
-		tot_size(0), changes(false), authd("DEV"), chgf() {
+	io(nullptr), iod(nullptr),
+	tot_size(0), changes(false), authd("DEV"), chgf() {
 }
 							device::		~device() {
-	if(io != nullptr) {
-		io->close();
-		delete io;
-		io = nullptr;
-	}
-	if(iod != nullptr) {
-		iod->close();
-		delete iod;
-		iod = nullptr;
-	}
-	#ifndef NO_SPLICE
-		if(fd != -1) {
-			close(fd);
-			#if !defined NDEBUG && defined DBG_INIT
-				dbglog((format("File descriptor n°%d closed.\n") % fd).str());
-			#endif
-			fd = -1;
-		}
-	#endif
+	if(io)
+		io.close();
+	if(iod)
+		iod.close();
+	for(auto &i: usbd)
+		i.second.close();
+	usbd.clear();
 }
-string						device::		read(streamptr p, size_t s)
-{
-		if (s == 0)
-			return string();
-		if (size() && p + s > size()) {
-			console::write((format("Blocks out of bounds ([0x%016X ; 0x%016X] > 0x%016X).\n") % p
-							% (p + s - 1) % size())
-							   .str(),
-						   true);
-			return string();
+string						device::		read(streamptr p, size_t s) {
+	if(s == 0)
+		return string();
+	if(size() && p + s > size()) {
+		console::write((format("Blocks out of bounds ([0x%016X ; 0x%016X] > 0x%016X).\n")
+			% p
+			% (p + s - 1)
+			% size()
+		).str(), true);
+		return string();
+	}
+	string res(s, '\0');
+	bool status = false;
+	authd.lock();
+	if(usbd.empty()) {
+		status = status || !io.seekg(static_cast<std::basic_istream<char>::off_type>(p), ios::beg);
+		status = status || !io.read(&res[0], static_cast<streamsize>(s));
+		if(status)
+			io.clear();
+	}
+	else {
+		auto b = usbd.lower_bound(p);		// *b >= p
+		if(b != usbd.begin() && b->first > p)
+			b--;						// *b < p && *b + b->s > p
+		auto e = usbd.lower_bound(p + s);	// *e > p + s - 1
+		streamptr c = 0;
+		for(auto i = b; i != e; i++) {
+			auto pos = p > i->first ? p - i->first : 0;
+			auto siz = min<filesize>(res.size() - c, (next(i, 1) == usbd.end() ? size() : next(i, 1)->first) - i->first - (p > i->first ? pos : 0));
+			status = status || !i->second.seekg(static_cast<std::basic_istream<char>::off_type>(pos), ios::beg);
+			status = status || !i->second.read(&res[c], static_cast<streamsize>(siz));
+			if(status) {
+				i->second.clear();
+				break;
+			}
+			c += siz;
 		}
-		string res(s, '\0');
-		bool status = false;
-		authd.lock();
-		if (!io->seekg(static_cast<std::basic_istream<char>::off_type>(p), ios::beg)) {
-			io->clear();
-			console::write((format("Unreachable block at 0x%016X.\n") % p).str(), true);
-			authd.unlock();
-			return string();
-		}
-		status = !io->read(&res[0], static_cast<streamsize>(s));
-		if (iod != nullptr)
-			status = status || chgf.read(p, s, res);
-		if (status) {
-			console::write((format("Unreadable block at 0x%016X.\n") % p).str(), true);
-			io->clear();
-			authd.unlock();
-			return string();
-		} else {
+	}
+	if(!iod)
+		status = status || chgf.read(p, s, res);
+	if (status) {
+		console::write((format("Unreadable block at 0x%016X.\n") % p).str(), true);
+		authd.unlock();
+		return string();
+	} else {
 		#if !defined NDEBUG && defined DBG_READ
 			devlog(true, p, res);
 		#endif
@@ -1252,8 +1255,7 @@ string						device::		read(streamptr p, size_t s)
 	authd.unlock();
 	return res;
 }
-int							device::		write(streamptr p, const string &s)
-{
+int							device::		write(streamptr p, const string &s) {
 	if(s.empty())
 		return 0;
 	if(p + s.size() > size()) {
@@ -1264,21 +1266,37 @@ int							device::		write(streamptr p, const string &s)
 		return 0;
 	bool status = false;
 	authd.lock();
-	if(!io->seekp(static_cast<std::basic_istream<char>::off_type>(p), ios::beg)) {
-		io->clear();
-		console::write((format("Unreachable block at 0x%016X.\n") % p).str(), true);
-		authd.unlock();
-		return EIO;
-	}
 	#ifndef NO_WRITE
-		if(iod != nullptr)
-			status = chgf.write(p, s);
+		if(iod)
+			status = status || chgf.write(p, s);
 		else
-			status = !io->write(&s[0], static_cast<streamsize>(s.size()));
+			if(usbd.empty()) {
+				status = status || !io.seekp(static_cast<std::basic_istream<char>::off_type>(p), ios::beg);
+				status = status || !io.write(&s[0], static_cast<streamsize>(s.size()));
+				if(status)
+					io.clear();
+			}
+			else {
+				auto b = usbd.lower_bound(p);		// *b >= p
+				if(b != usbd.begin() && b->first > p)
+					b--;						// *b < p && *b + b->s > p
+				auto e = usbd.lower_bound(p + s.size());	// *e > p + s - 1
+				streamptr c = 0;
+				for(auto i = b; i != e; i++) {
+					auto pos = p > i->first ? p - i->first : 0;
+					auto siz = min<filesize>(s.size() - c, (next(i, 1) == usbd.end() ? size() : next(i, 1)->first) - i->first - (p > i->first ? pos : 0));
+					status = status || !i->second.seekg(static_cast<std::basic_istream<char>::off_type>(pos), ios::beg);
+					status = status || !i->second.write(&s[c], static_cast<streamsize>(siz));
+					if(status) {
+						i->second.clear();
+						break;
+					}
+					c += siz;
+				}
+			}
 		changes = true;
 	#endif
 	if(status) {
-		io->clear();
 		console::write((format("Unwriteable block at 0x%016X.\n") % p).str(), true);
 		authd.unlock();
 		return EIO;
@@ -1293,80 +1311,89 @@ int							device::		write(streamptr p, const string &s)
 }
 int							device::		setup() {
 	bool err = false;
-	io = new fstream(fatx_context::get()->mmi.input.data(), ios::binary | (
-		fatx_context::get()->mmi.writeable() && fatx_context::get()->mmi.diffile.empty() ? (ios::out | ios::in) : ios::in
-	));
-	if(!fatx_context::get()->mmi.diffile.empty()) {
-		iod = new fstream(fatx_context::get()->mmi.diffile.data(), ios::binary | (fatx_context::get()->mmi.writeable() ? (ios::out | ios::in) : ios::in));
+	if(fatx_context::get()->mmi.table != "usb") {
+		err = err || !(io = fstream(fatx_context::get()->mmi.input, ios::binary | (
+			fatx_context::get()->mmi.writeable() && fatx_context::get()->mmi.diffile.empty() ? (ios::out | ios::in) : ios::in
+		)), io);
+		err = err || !io.seekg(0);
+		err = err || !io.seekg(0, ios::end);
+		tot_size = err ? 0 : static_cast<streamptr>(io.tellg());
+		if(fatx_context::get()->mmi.writeable() && fatx_context::get()->mmi.diffile.empty()) {
+			err = err || !io.seekp(0);
+			err = err || !io.seekp(0, ios::end);
+		}
+	}
+	else {
+		auto path = fatx_context::get()->mmi.input + sepdir;
+		streamptr p = 0;
+		fstream f;
+		if(f = fstream(path + usb_data + "0000", ios::binary | ios::in), f)
+			path = path + usb_data;
+		else {
+			path = path + usb_dir + sepdir + usb_data;
+			err = err || !(f = fstream(path + "0000", ios::binary | ios::in), f);
+		}
+		err = err || !f.seekg(static_cast<std::basic_istream<char>::off_type>(0x240), ios::beg);
+		char buf[8];
+		err = err || !f.read(&buf[0], static_cast<streamsize>(8));
+		streamptr dts = err ? 0 : byte_order<8>::litend(&buf[0])();
+		#if !defined NDEBUG && defined DBG_INIT
+			dbglog((format("USB Data of size: %u.\n") % dts).str());
+		#endif
+		if(f)
+			f.close();
+		size_t i = 0;
+		streamptr s = 0;
+		streamptr ts = 0;
+		streamptr cts = 0;
+		while(!err && (i <= 1 || p < dts)) {
+			sprintf(&buf[0], "%04lu", i);
+			err = err || !(f = fstream(path + buf, ios::binary | (
+				fatx_context::get()->mmi.writeable() && fatx_context::get()->mmi.diffile.empty() ? (ios::out | ios::in) : ios::in
+			)), f);
+			err = err || !f.seekg(0);
+			err = err || !f.seekg(0, ios::end);
+			if(fatx_context::get()->mmi.writeable() && fatx_context::get()->mmi.diffile.empty()) {
+				err = err || !f.seekp(0);
+				err = err || !f.seekp(0, ios::end);
+			}
+			if(!err) {
+				s = static_cast<streamptr>(f.tellg());
+				usbd.emplace(p, std::move(f));
+				ts += s;
+				if(i > 1)
+					cts += s;
+			}
+			#if !defined NDEBUG && defined DBG_INIT
+				dbglog((format("USB Data file %s at %u -> %u (%u).\n") % (path + buf) % p % (p + s) % s).str());
+			#endif
+			p += err ? 0 : s;
+			i++;
+		}
+		err = err || dts != cts;
+		tot_size = ts;
+	}
+	if(!err && !fatx_context::get()->mmi.diffile.empty()) {
+		err = err || !(iod = fstream(fatx_context::get()->mmi.diffile, ios::binary | (fatx_context::get()->mmi.writeable() ? (ios::out | ios::in) : ios::in)), iod);
 		#if !defined NDEBUG && defined DBG_INIT
 			dbglog((format("Diff file requested in %s mode.\n") % (fatx_context::get()->mmi.writeable() ? "write" : "read")).str());
 		#endif
-	}
-	if(io == nullptr || (!fatx_context::get()->mmi.diffile.empty() && iod == nullptr))
-		err = true;
-	else {
-		#ifndef NO_SPLICE
-			io->sync_with_stdio();
-			if(iod != nullptr)
-				iod->sync_with_stdio();
-		#endif
-		io->seekg(0);
-		err = err || !io->good();
-		io->seekg(0, ios::end);
-		err = err || !*io;
-		tot_size = static_cast<streamptr>(io->tellg());
-		if(iod != nullptr) {
-			iod->seekg(0);
-			err = err || !*iod;
-			iod->seekg(0, ios::end);
-			err = err || !*iod;
-		}
+		err = err || !iod.seekg(0);
+		err = err || !iod.seekg(0, ios::end);
 		if(fatx_context::get()->mmi.writeable()) {
-			if(iod == nullptr) {
-				io->seekp(0);
-				err = err || !io->good();
-				io->seekp(0, ios::end);
-				err = err || !*io;
-			}
-			else {
-				iod->seekp(0);
-				err = err || !*iod;
-				iod->seekp(0, ios::end);
-				err = err || !*iod;
-			}
+			err = err || !iod.seekp(0);
+			err = err || !iod.seekp(0, ios::end);
 		}
-		if(iod != nullptr)
-			err = err || chgf.load(iod);
+		err = err || chgf.load();
 	}
-	#ifndef NO_SPLICE
-		fd = open(fatx_context::get()->mmi.input.data(), O_LARGEFILE | (fatx_context::get()->mmi.writeable() && fatx_context::get()->mmi.diffile.empty() ? O_RDONLY : O_RDWR));
-		if(fd == -1)
-			err = true;
-		else {
-			err = err || lseek(fd, 0, SEEK_SET) == -1;
-			err = err || lseek(fd, 0, SEEK_END) == -1;
-		}
-		#if !defined NDEBUG && defined DBG_INIT
-			dbglog((format("File descriptor n°%d opened.\n") % fd).str());
-		#endif
-	#endif
 	if(err) {
-		if(io != nullptr) {
-			io->close();
-			delete io;
-			io = nullptr;
-		}
-		if(iod != nullptr) {
-			iod->close();
-			delete iod;
-			iod = nullptr;
-		}
-		#ifndef NO_SPLICE
-			if(fd != -1) {
-				close(fd);
-				fd = -1;
-			}
-		#endif
+		if(io)
+			io.close();
+		if(iod)
+			iod.close();
+		for(auto &i: usbd)
+			i.second.close();
+		usbd.clear();
 		console::write((format("Error opening %s%s for read%s\n")
 			% (fatx_context::get()->mmi.input)
 			% (fatx_context::get()->mmi.diffile.empty() ? "" : (":" + fatx_context::get()->mmi.diffile))
@@ -1441,7 +1468,7 @@ int							fatxpar::		setup() {
 	bool found = false;
 	if(fatx_context::get()->mmi.verbose)
 		console::write((format("Support size: %d.\n") % ts).str());
-	map<string, map<string, pair<streamptr, streamptr>>> sch = {
+	map<const string, map<const string, const pair<streamptr, streamptr>>> sch = {
 		{ "file", {
 			{ "x2",		{	0x0,			0x0			}}
 		}},
@@ -1464,7 +1491,7 @@ int							fatxpar::		setup() {
 			{ "x2",		{	0x130eb0000,	0x0			}}
 		}}
 	};
-	map<string, string> names = {
+	map<const string, const string> names = {
 		{ "file",	"plain file" },
 		{ "mu",		"memory unit" },
 		{ "usb",	"USB drive" },
@@ -1478,12 +1505,12 @@ int							fatxpar::		setup() {
 		{ "x1",		"original Xbox compatibility" },
 		{ "x2",		"data" }
 	};
-	map<string, set<string>> cap;
-	for(auto i: sch) {
+	map<const string, set<string>> cap;
+	for(const auto &i: sch) {
 		if(ts <= ranges::find_if(i.second, [] (const auto j) noexcept { return j.second.second == 0; })->second.first)
 			continue;
 		cap.emplace(i.first, set<string>{});
-		for(auto j: i.second) {
+		for(const auto &j: i.second) {
 			if(fatx_context::get()->dev.read(j.second.first).find(fsid, 0) == 0) {
 				cap[i.first].insert(j.first);
 				if(fatx_context::get()->mmi.verbose)
@@ -1498,9 +1525,9 @@ int							fatxpar::		setup() {
 		cap.erase("file");
 	#ifndef NDEBUG
 		dbglog("CAPACITY:\n");
-		for(auto i: cap) {
+		for(const auto &i: cap) {
 			dbglog("  " + i.first + "\n");
-			for(auto j: i.second)
+			for(const auto &j: i.second)
 				dbglog("    " + j + "\n");
 		}
 	#endif
@@ -1670,40 +1697,34 @@ void						fatxpar::		label(const unsigned char buf[slab], const size_t size) {
 	}
 }
 
-clusptr						clsarithm::		siz2cls(filesize s)
-{
+clusptr						clsarithm::		siz2cls(filesize s) {
 	return (s >> fatx_context::get()->par.clus_pow)
 		   + (((s - ((s >> fatx_context::get()->par.clus_pow) << fatx_context::get()->par.clus_pow))
 			   != 0)
 				  ? 1
 				  : 0);
 }
-clusptr						clsarithm::		inccls(clusptr p)
-{
+clusptr						clsarithm::		inccls(clusptr p) {
 	return (p <= fatx_context::get()->par.clus_fat) ? p + 1 : 2;
 }
-streamptr					clsarithm::		cls2ptr(clusptr p)
-{
+streamptr					clsarithm::		cls2ptr(clusptr p) {
 	if (p < fatx_context::get()->par.root_clus || p > fatx_context::get()->par.clus_fat) {
 		console::write((format("Cluster pointer in data out of bounds (0x%08X).\n") % p).str(), true);
 		return 0;
 	}
 	return fatx_context::get()->par.root_start + (p - 1) * fatx_context::get()->par.clus_size;
 }
-clusptr						clsarithm::		ptr2cls(streamptr p)
-{
+clusptr						clsarithm::		ptr2cls(streamptr p) {
 	return ((p - fatx_context::get()->par.root_start) >> fatx_context::get()->par.clus_pow) + 1;
 }
-streamptr					clsarithm::		cls2fat(clusptr p)
-{
+streamptr					clsarithm::		cls2fat(clusptr p) {
 	if (p < fatx_context::get()->par.root_clus || p > fatx_context::get()->par.clus_fat) {
 		console::write((format("Cluster pointer in fat out of bounds (0x%08X).\n") % p).str(), true);
 		return 0;
 	}
 	return fatx_context::get()->par.fat_start + p * fatx_context::get()->par.chain_size;
 }
-string						clsarithm::		clsprint(clusptr p, clusptr r)
-{
+string						clsarithm::		clsprint(clusptr p, clusptr r) {
 	return (p == r + 1)
 			   ? "next"
 			   : ((p == FLK) ? "free" : ((p == EOC) ? "end" : (format("0x%08X") % p).str()));
@@ -1721,8 +1742,7 @@ string						clsarithm::		clsprint(clusptr p, clusptr r)
 							dskmap::		~dskmap() {
 	memnext.clear();
 }
-void						dskmap::		forfat(const lbdfat_t &lbd)
-{
+void						dskmap::		forfat(const lbdfat_t &lbd) {
 	clusptr c = fatx_context::get()->par.root_clus;
 	for(
 		streamptr p = fatx_context::get()->par.fat_start;
@@ -1742,8 +1762,7 @@ void						dskmap::		forfat(const lbdfat_t &lbd)
 			);
 	}
 }
-dskmap::memnext_t::lkval_t  dskmap::		real_read(clusptr p, size_t s)
-{
+dskmap::memnext_t::lkval_t  dskmap::		real_read(clusptr p, size_t s) {
 	memnext_t::lkval_t res;
 	s = min<size_t>(s, fatx_context::get()->par.clus_fat - p);
 	string buf = fatx_context::get()->dev.read(clsarithm::cls2fat(p), fatx_context::get()->par.chain_size * s);
@@ -1768,8 +1787,7 @@ dskmap::memnext_t::lkval_t  dskmap::		real_read(clusptr p, size_t s)
 	}
 	return res;
 }
-int							dskmap::		real_write(clusptr p, clusptr v)
-{
+int							dskmap::		real_write(clusptr p, clusptr v) {
 	string buf(fatx_context::get()->par.chain_size, '\0');
 	if(fatx_context::get()->par.chain_size == 4)
 		buf = byte_order<4>::litend(static_cast<byte_order<4>::value_type>(v));
@@ -1777,8 +1795,7 @@ int							dskmap::		real_write(clusptr p, clusptr v)
 		buf = byte_order<2>::litend(static_cast<byte_order<2>::value_type>(v));
 	return fatx_context::get()->dev.write(clsarithm::cls2fat(p), buf);
 }
-vareas						dskmap::		getareas(clusptr orig, lbdarea_t lbd)
-{
+vareas						dskmap::		getareas(clusptr orig, const lbdarea_t &lbd) {
 	if(lbd == nullptr)
 			authm.lock_shared();
 	set<clusptr> sc;
@@ -1894,8 +1911,7 @@ clusptr						dskmap::		read(clusptr p) {
 	}
 	return memnext(p);
 }
-int							dskmap::		write(clusptr p, clusptr v)
-{
+int							dskmap::		write(clusptr p, clusptr v) {
 	if (p == FLK || p == EOC) {
 		console::write((format("Can't write FAT at special cluster value (0x%08X).\n") % p).str(), true);
 		return EOVERFLOW;
@@ -1910,8 +1926,7 @@ int							dskmap::		write(clusptr p, clusptr v)
 	}
 	return memnext(p, v);
 }
-vareas						dskmap::		alloc(clusptr s, clusptr o)
-{
+vareas						dskmap::		alloc(clusptr s, clusptr o) {
 	vareas res;
 	if(s == 0)
 		return vareas();
@@ -2293,9 +2308,9 @@ void						memmap::		printfat() {
 
 							// root entry constructor
 							entry::			entry() :
-	mux_B(mutex_buff + "/"),
-	mux_D(mutex_data + "/"),
-	mux_E(mutex_entr + "/"),
+	mux_B(string() + mutex_buff + "/"),
+	mux_D(string() + mutex_data + "/"),
+	mux_E(string() + mutex_entr + "/"),
 	entbuf(),
 	v_cptacc(0),
 	v_writeopened(fatx_context::get()->mmi.prog != frontend::fuse),
@@ -2345,20 +2360,17 @@ void						memmap::		printfat() {
 	v_parent(nullptr),
 	childs(),
 	v_areas() {
+	const string nchar = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&'()-.@[]^_`{}~ ";
 	v_status = (
 		// 0xFF or 0x00 on 2 firsts bytes = end of entries
 		(buf == nullptr || (buf[0] == EOD && buf[1] == EOD) || (buf[0] == 0 && buf[1] == 0)) ? end : (
-			// invalid = invalid v_cluster (we scan something else than an entry) or invalid name
 			(
-				(v_cluster > fatx_context::get()->par.clus_fat) ||
-				static_cast<unsigned char>(buf[2]) < ' ' || (
-				buf[3] != 0 && (static_cast<unsigned char>(buf[3]) < ' ' || (
-				buf[4] != 0 && (static_cast<unsigned char>(buf[4]) < ' '
-			))))) ? invalid : (
+				// invalid = invalid v_cluster (we scan something else than an entry) or invalid name
+				v_cluster > fatx_context::get()->par.clus_fat) || any_of(buf + 2, buf + 2 + (v_namesize <= name_size ? v_namesize : 2), [&] (char c) { return nchar.find(c) == std::string::npos; }) ? invalid : (
 				// valid entry = good name size + v_cluster not free in FAT
-				(buf[0] >= 0 && buf[0] <= name_size && ((v_size == 0 && v_cluster == 0) || (v_cluster != 0 && fatx_context::get()->fat->dskmap::read(v_cluster) != FLK))) ? valid : (
-					// recoverable entry = entry with v_cluster not allocated to something else
+				(v_namesize <= name_size && ((v_size == 0 && v_cluster == 0) || (v_cluster != 0 && fatx_context::get()->fat->dskmap::read(v_cluster) != FLK))) ? valid : (
 					(
+						// recoverable entry = entry with v_cluster not allocated to something else
 						(v_cluster == 0 && !v_flags.dir) || (
 							v_cluster != 0 && fatx_context::get()->fat->dskmap::read(v_cluster) == FLK && (
 							typeid(fatx_context::get()->fat) != typeid(memmap*) || (
@@ -2380,7 +2392,7 @@ void						memmap::		printfat() {
 			v_status = invalid;
 	if(v_status != end && v_status != invalid) {
 		for(size_t i = 0; i < strlen(v_name); i++)
-			v_name[i] = (v_name[i] == EOD) ? '\0' : ((static_cast<unsigned char>(v_name[i]) < ' ') || static_cast<unsigned char>(v_name[i]) > '~') ? '~' : v_name[i];
+			v_name[i] = (v_name[i] == EOD) ? '\0' : nchar.find(v_name[i]) == std::string::npos ? '~' : v_name[i];
 	}
 	mux_B.name(mutex_buff + path());
 	mux_D.name(mutex_data + path());
@@ -2968,8 +2980,7 @@ void						entry::			guess() {
 	for(entry* i: old)
 		i->guess();
 }
-bool						entry::			analyse(pass_t step, const string &header)
-{
+bool						entry::			analyse(pass_t step, const string &header) {
 	bool recovered	= false;
 	if(step != findfile && flags().dir && status() == delnodata) {
 		console::write((format("Entry %s points to invalid data. Skipping.\n") % (header + name())).str(), fatx_context::get()->mmi.dialog);
@@ -3376,35 +3387,6 @@ bool						entry::			operator == (entry& b) {
 	;
 	return res;
 }
-#ifndef NO_SPLICE
-struct fuse_bufvec*			entry::			getbufvec(streamptr offset, filesize s) {
-	vareas va = fatx_context::get()->fat->getareas(cluster()).sub(s, offset);
-	if(va.empty() || s == 0)
-		return nullptr;
-	struct fuse_bufvec *bufv2	= nullptr;
-	struct fuse_bufvec *bufv	= static_cast<struct fuse_bufvec *>(malloc(sizeof(struct fuse_bufvec)));
-	if(bufv == nullptr)
-		return nullptr;
-	bufv->idx	= 0;
-	bufv->off	= 0;
-	bufv->count = 0;
-	for(const area& i: va) {
-		if(++(bufv->count) > 1) {
-			if((bufv2 = static_cast<struct fuse_bufvec *>(realloc(bufv, sizeof(struct fuse_bufvec) + (bufv->count - 1) * sizeof(struct fuse_buf)))) == nullptr) {
-				free(bufv);
-				return nullptr;
-			}
-			bufv = bufv2;
-		}
-		bufv->buf[bufv->count - 1].size		= i.size;
-		bufv->buf[bufv->count - 1].flags	= fuse_buf_flags(FUSE_BUF_IS_FD | FUSE_BUF_FD_SEEK);
-		bufv->buf[bufv->count - 1].fd		= fatx_context::get()->dev.getfd();
-		bufv->buf[bufv->count - 1].mem		= nullptr;
-		bufv->buf[bufv->count - 1].pos		= off_t(i.pointer);
-	}
-	return bufv;
-}
-#endif
 
 static int									fatx_getattr	(const char* path, struct stat* st) {
 	#ifndef NDEBUG
@@ -3462,18 +3444,12 @@ static int									fatx_flush		(const char* path, struct fuse_file_info* fi) {
 	#ifndef NDEBUG
 		dbglog((format("FLUSH: %s\n") % path).str());
 	#endif
-	#ifndef NO_SPLICE
-	(void)path;
-	(void)fi;
-	return 0;
-	#else
 	entry* f(reinterpret_cast<entry *>(fi->fh));
 	if(f == nullptr)
 		f = fatx_context::get()->root->find(path);
 	if(f == nullptr || f->status() == entry::invalid)
 		return -ENOENT;
 	return -f->flush();
-	#endif
 }
 static int									fatx_close		(const char* path, struct fuse_file_info* fi) {
 	#ifndef NDEBUG
@@ -3712,11 +3688,7 @@ static void*								fatx_init		(struct fuse_conn_info* fci) {
 	#ifndef NDEBUG
 		dbglog("INIT\n");
 	#endif
-	fci->want = FUSE_CAP_BIG_WRITES | FUSE_CAP_DONT_MASK
-	#ifndef NO_SPLICE
-		| FUSE_CAP_SPLICE_READ | FUSE_CAP_SPLICE_WRITE | FUSE_CAP_SPLICE_MOVE
-	#endif
-	;
+	fci->want = FUSE_CAP_BIG_WRITES | FUSE_CAP_DONT_MASK;
 	return nullptr;
 }
 static void									fatx_destroy	(void*) {
@@ -3726,115 +3698,7 @@ static void									fatx_destroy	(void*) {
 	fatx_context::get()->destroy();
 	delete fatx_context::get();
 }
-#ifndef NO_SPLICE
-static int									fatx_read_buf	(const char* path, struct fuse_bufvec** bufp, size_t size, off_t offset, struct fuse_file_info* fi) {
-	#ifndef NDEBUG
-		dbglog((format("READBUF: %s (%d@%d)\n") % path % size % offset).str());
-	#endif
-	entry* f(reinterpret_cast<entry*>(fi->fh));
-	if(f == nullptr)
-		f = fatx_context::get()->root->find(path);
-	if(offset >= off_t(f->size()) || size == 0) {
-		*bufp = new fuse_bufvec({1, 0, 0, { { 0, fuse_buf_flags(0), nullptr, -1, 0 } }});
-		return 0;
-	}
-	size = min<filesize>(f->size(), static_cast<long unsigned int>(offset) + size) - static_cast<long unsigned int>(offset);
-	if(fatx_context::get()->mmi.diffile.empty())
-		*bufp = f->getbufvec(streamptr(offset), size);
-	else {
-		void *buf = malloc(size);
-		if(buf == nullptr)
-			return -ENOMEM;
-		struct fuse_bufvec* bv = new fuse_bufvec({1, 0, 0, { { size, fuse_buf_flags(0), buf, -1, 0 } }});
-		if(bv == nullptr) {
-			free(buf);
-			return -ENOMEM;
-		}
-		if(f->bufread(reinterpret_cast<char *>(buf), filesize(offset), size) == 0) {
-			free(buf);
-			delete bv;
-			return -EFAULT;
-		}
-		*bufp = bv;
-	}
-	return (*bufp != nullptr) ? int(size) : -ENOMEM;
-}
-static int									fatx_write_buf	(const char* path, struct fuse_bufvec* buf, off_t offset, struct fuse_file_info* fi) {
-	assert(buf != nullptr);
-	#ifndef NDEBUG
-		dbglog((format("WRITEBUF: %s (%d@%d)\n") % path % fuse_buf_size(buf) % offset).str());
-	#endif
-	entry* f(reinterpret_cast<entry *>(fi->fh));
-	if(f == nullptr)
-		f = fatx_context::get()->root->find(path);
-	if(!fatx_context::get()->mmi.writeable())
-		return -EROFS;
-	if(f->flags().ro)
-		return -EACCES;
-	if(!f->writeopened()) {
-		#ifndef NDEBUG
-			dbglog((format("**> writing a file not opened for write (%s)") % path).str());
-		#endif
-		return -EACCES;
-	}
-	if(f->size() < static_cast<long unsigned int>(offset) + fuse_buf_size(buf)) {
-		int res = f->resize(static_cast<long unsigned int>(offset) + fuse_buf_size(buf));
-		if(res)
-			return -res;
-	}
-	#ifndef NO_WRITE
-	if(fatx_context::get()->mmi.diffile.empty()) {
-		struct fuse_bufvec* dst = f->getbufvec(streamptr(offset), fuse_buf_size(buf));
-		if(dst == nullptr)
-			return -ENOMEM;
-		int res = int(fuse_buf_copy(dst, buf, FUSE_BUF_SPLICE_MOVE));
-		free(dst);
-		return res;
-	}
-	else {
-		off_t o = offset;
-		for(size_t i = 0; i < buf->count; i++) {
-			void *t = nullptr;
-			if((buf->buf[i].flags & FUSE_BUF_IS_FD) == 0) {
-				if((t = buf->buf[i].mem) == nullptr)
-					return -EFAULT;
-			}
-			else {
-				FILE* fl = fdopen(buf->buf[i].fd, "r");
-				if(fl == nullptr)
-					return -EBADF;
-				if((buf->buf[i].flags & FUSE_BUF_FD_SEEK) != 0)
-					fseek(fl, buf->buf[i].pos, SEEK_SET);
-				t = malloc(buf->buf[i].size);
-				if(t == nullptr) {
-					fclose(fl);
-					return -ENOMEM;
-				}
-				if(fread(t, buf->buf[i].size, 1, fl) != 1) {
-					free(t);
-					fclose(fl);
-					return -EIO;
-				}
-				fclose(fl);
-			}
-			if(f->bufwrite(reinterpret_cast<const char *>(t), filesize(o), buf->buf[i].size) != buf->buf[i].size) {
-				if((buf->buf[i].flags & FUSE_BUF_IS_FD) != 0)
-					free(t);
-				return -EIO;
-			}
-			if((buf->buf[i].flags & FUSE_BUF_IS_FD) != 0)
-				free(t);
-			o += off_t(buf->buf[i].size);
-		}
-		return int(o - offset);
-	}
-	#else
-		(void) buf;
-		(void) offset;
-		return 0;
-	#endif
-}
-#endif
+
 static struct fuse_operations				fatx_ops;
 
 int											main(int argc, char* argv[]) {
@@ -3945,10 +3809,6 @@ int											main(int argc, char* argv[]) {
 		fatx_ops.statfs			= fatx_statfs;
 		fatx_ops.init			= fatx_init;
 		fatx_ops.destroy		= fatx_destroy;
-		#ifndef NO_SPLICE
-			fatx_ops.read_buf		= fatx_read_buf;
-			fatx_ops.write_buf		= fatx_write_buf;
-		#endif
 		#ifndef NDEBUG
 			string s;
 			for(int i = 0; i < fuse_argc; i++)

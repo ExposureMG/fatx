@@ -3,7 +3,7 @@
 /*
  *	FATX filesystem support (Xbox 360)
  *
- *  Copyright (C) 2012-2023 Christophe Duverger
+ *  Copyright (C) 2012-2024 Christophe Duverger
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -39,7 +39,6 @@
  *	-D DBG_GAPS		to print gaps
  *	-D NO_WRITE		to fake writing but no modification is done
  *	-D NO_CACHE		to disable FAT cache
- *	-D NO_SPLICE	to disable splice calls by fuse
  *
  *  Make symlink to executable with names:
  *	 "fusefatx"		for fuse filesystem support
@@ -70,6 +69,7 @@
 #include <algorithm>
 #include <bitset>
 #include <functional>
+#include <cstdint>
 
 #include <string.h>
 #include <math.h>
@@ -158,10 +158,10 @@ private:
 	private:
 		size_t						pos(const size_t i) const { return (big == 0) ? bytes - 1 - i : i; }
 		std::string::value_type		getbyte(const value_type n, const size_t i = 0) const {
-			return std::string::value_type((n & (0xFFU << (pos(i) * 8))) >> (pos(i) * 8));
+			return std::string::value_type((n & (0xFFULL << (pos(i) * 8))) >> (pos(i) * 8));
 		}
 		value_type					setbyte(const std::string &s, const size_t i = 0) const {
-			return static_cast<value_type>((1 << (8 * pos(i))) * static_cast<uint8_t>(s[i]));
+			return static_cast<value_type>((1ULL << (8 * pos(i))) * static_cast<uint8_t>(s[i]));
 		}
 		value_type					getvalue() const {
 			value_type res = 0;
@@ -501,39 +501,28 @@ private:
 	};
 	class							chgfile : public map<streamptr, segment> {
 	private:
-		fstream*					iod;
+		fstream						iod;
 
 		bool						addseg(streamptr, const string&);
 	public:
 									chgfile() : iod(nullptr) { }
-		bool						load(fstream*);
-		bool						read(streamptr, const size_t, string &) const;
+		bool						load();
+		bool						read(streamptr, const size_t, string &);
 		bool						write(streamptr, const string &);
 	};
-	fstream*						io;
-	fstream*						iod;
-	#ifndef NO_SPLICE
-	int								fd;
-	#endif
+	fstream							io;
+	fstream							iod;
 	streamptr						tot_size;
 	bool							changes;
 	mymutx							authd;
 	chgfile							chgf;
+	map<streamptr, fstream>			usbd;
 public:
 									device();
 									~device();
 	int								setup();
-	streamptr						size() const {
-		return tot_size;
-	}
-	bool							modified() const {
-		return changes;
-	}
-	#ifndef NO_SPLICE
-	int 							getfd() const {
-		return fd;
-	}
-	#endif
+	streamptr						size() const { return tot_size; }
+	bool							modified() const { return changes; }
 	string							read(streamptr, size_t = blksize);
 	int								write(streamptr, const string &);
 	string							address(streamptr) const;
@@ -568,7 +557,7 @@ private:
 		uint32_t					p2_size;
 		uint32_t					p1_start;
 		uint32_t					p1_size;
-									devheader(char buf[blksize]) :
+									devheader(char const buf [blksize]) :
 			id			(byte_order<4>::litend(&buf[0])()),
 			unkn		(byte_order<4>::litend(&buf[4])()),
 			p2_start	(byte_order<4>::litend(&buf[8])()),
@@ -589,6 +578,9 @@ private:
 			memcpy(&buf[16], byte_order<4>::litend(p1_start).data(), 4);
 			memcpy(&buf[20], byte_order<4>::litend(p1_size).data(), 4);
 		}
+	};
+	class							usbheader {
+	public:
 	};
 public:
 	uint32_t						par_id;
@@ -620,8 +612,7 @@ inline clusptr						ptr2cls(streamptr);
 inline streamptr					cls2fat(clusptr);
 inline string						clsprint(clusptr, clusptr);
 } // namespace clsarithm
-class								dskmap
-{
+class								dskmap {
 protected:
 	typedef clusptr					mapptr_t;
 	typedef clusptr					mapsiz_t;
@@ -656,12 +647,12 @@ public:
 		modified,
 		marked
 	};
-									dskmap(const fatxpar&);
+									dskmap(const fatxpar &);
 	virtual							~dskmap();
 	clusptr							clsavail();
 	void							erase();
 	void							gapcheck();
-	vareas							getareas(clusptr, lbdarea_t = nullptr);
+	vareas							getareas(clusptr, const lbdarea_t & = nullptr);
 	virtual clusptr					read(clusptr);
 	int								write(clusptr, clusptr);
 	vareas							alloc(clusptr, clusptr = 0);
@@ -766,17 +757,17 @@ private: \
 public: \
 	type							name() { return protected_read<cref>(v_##name); } \
 	void							name(type a) { protected_write<type>(v_##name, a); }
-	PROTECTED_VAR(cptacc,		int,				const int&)
-	PROTECTED_VAR(writeopened,	bool,				const bool&)
-	PROTECTED_VAR(status,		status_t,			const status_t&)
-	PROTECTED_VAR(namesize,		uint8_t,			const uint8_t&)
-	PROTECTED_VAR(flags,		attrib,				const attrib&)
+	PROTECTED_VAR(cptacc,		int,				const int &)
+	PROTECTED_VAR(writeopened,	bool,				const bool &)
+	PROTECTED_VAR(status,		status_t,			const status_t &)
+	PROTECTED_VAR(namesize,		uint8_t,			const uint8_t &)
+	PROTECTED_VAR(flags,		attrib,				const attrib &)
 	PROTECTED_VAR(cluster,		clusptr,			const clusptr &)
 	PROTECTED_VAR(size,			filesize,			const filesize &)
 	PROTECTED_VAR(creation,		date,				const date &)
-	PROTECTED_VAR(access,		date,				const date&)
-	PROTECTED_VAR(update,		date,				const date&)
-	PROTECTED_VAR(loc,			streamptr,			const streamptr&)
+	PROTECTED_VAR(access,		date,				const date &)
+	PROTECTED_VAR(update,		date,				const date &)
+	PROTECTED_VAR(loc,			streamptr,			const streamptr &)
 	PROTECTED_VAR(parent,		entry*,				entry* const)
 public:
 	ptr_vector<entry>				childs;
