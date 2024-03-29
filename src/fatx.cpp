@@ -20,13 +20,12 @@
 
 const char * const							sepdir		= "/";				// using unix directories
 const char * const							fsid		= "XTAF";			// filesystem id
-const char * const							fidx		= "name.txt";		// file used for label name
+const char * const							flab		= "name.txt";		// file used for label name
 const char * const							def_landf	= "lost+found";		// default directory for lost & founds
 const char * const							def_fpre	= "FILE";			// default file prefix for lost & founds
 const char * const							def_label	= "XBOX";			// default label name
 const char * const							usb_dir		= "Xbox360";		// USB drive directory
 const char * const							usb_data	= "Data";			// USB drive data file prefix
-
 
 const char * const							mutex_buff   = "Buffer:";
 const char * const							mutex_data   = "Data:";
@@ -36,7 +35,11 @@ fatx_context*				fatx_context::	fatxc		= nullptr;
 
 #ifndef NDEBUG
 inline void									dbglog(const string &s) {
-	console::write((format("# {%08X} %s") % std::this_thread::get_id() % s).str(), true);
+	istringstream flux(s);
+	string line;
+	while(getline(flux, line)) {
+		console::write((format("# {%08X} %s\n") % this_thread::get_id() % line).str(), true);
+	}
 }
 #endif
 
@@ -84,7 +87,7 @@ vareas						vareas::		sub(filesize s, filesize o) const {
 	), res.end());
 	#if !defined NDEBUG && defined DBG_AREAS
 		if(res.empty())
-			dbglog("NO SUBAREA.\n");
+			dbglog("NO SUBAREA.");
 	#endif
 	for(area& i: res) {
 		filesize ns = i.size;
@@ -104,7 +107,7 @@ vareas						vareas::		sub(filesize s, filesize o) const {
 	}
 	#if !defined NDEBUG && defined DBG_AREAS
 		if(o > nbcls() << fatx_context::get()->par.clus_pow)
-			dbglog((format("AREAS: bad parameters, offset:0x%016X size:%d\n") % o % s).str());
+			dbglog((format("AREAS: bad parameters, offset:0x%016X size:%d") % o % s).str());
 		else
 			dbglog("Sub" + res.print());
 	#endif
@@ -162,7 +165,7 @@ string						vareas::		print() const {
 							buffer::		buffer(const streamptr o, const streamptr s) : touched(false), offset(o) {
 	if(s == 0) {
 		#if !defined NDEBUG && defined DBG_BUFFER
-			dbglog((format("... buffer: empty allocation try\n")).str());
+			dbglog((format("... buffer: empty allocation try")).str());
 		#endif
 		return;
 	}
@@ -175,18 +178,18 @@ string						vareas::		print() const {
 		if(siz < fatx_context::get()->par.clus_size) {
 			clear();
 			#if !defined NDEBUG && defined DBG_BUFFER
-				dbglog((format("... buffer: no way to alloc 0x%08X 0x%016X %d\n") % data() % offset % siz).str());
+				dbglog((format("... buffer: no way to alloc 0x%08X 0x%016X %d") % data() % offset % siz).str());
 			#endif
 			return;
 		}
 	}
 	#if !defined NDEBUG && defined DBG_BUFFER
-		dbglog((format(".oO buffer: 0x%08X 0x%016X %d\n") % this % offset % (*this).size()).str());
+		dbglog((format(".oO buffer: 0x%08X 0x%016X %d") % this % offset % (*this).size()).str());
 	#endif
 }
 							buffer::		~buffer() {
 	#if !defined NDEBUG && defined DBG_BUFFER
-		dbglog((format("Oo. buffer: 0x%08X 0x%016X %d\n") % this % offset % (*this).size()).str());
+		dbglog((format("Oo. buffer: 0x%08X 0x%016X %d") % this % offset % (*this).size()).str());
 	#endif
 }
 void						buffer::		enlarge(const streamptr s) {
@@ -196,12 +199,12 @@ void						buffer::		enlarge(const streamptr s) {
 	if(size() < s) {
 		clear();
 		#if !defined NDEBUG && defined DBG_BUFFER
-			dbglog((format("... buffer: no way to alloc 0x%08X 0x%016X %d\n") % data() % offset % s).str());
+			dbglog((format("... buffer: no way to alloc 0x%08X 0x%016X %d") % data() % offset % s).str());
 		#endif
 		return;
 	}
 	#if !defined NDEBUG && defined DBG_BUFFER
-		dbglog((format("OOO buffer: 0x%08X 0x%016X %d\n") % this % offset % (*this).size()).str());
+		dbglog((format("OOO buffer: 0x%08X 0x%016X %d") % this % offset % (*this).size()).str());
 	#endif
 }
 #if !defined NDEBUG && defined DBGBUFDMP
@@ -234,14 +237,14 @@ void						mymutx::		lock() {
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format(">>> Lock request [eXclu:%d %s]\n") % nb % nam).str());
+			dbglog((format(">>> Lock request [eXclu:%d %s]") % nb % nam).str());
 		#endif
-		upgrade_mutex::lock();
+		shared_mutex::lock();
 		#if !defined NDEBUG && defined DBG_SEM
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format("	Lock done [eXclu:%d %s].\n") % nb % nam).str());
+			dbglog((format("	Lock done [eXclu:%d %s].") % nb % nam).str());
 		#endif
 	}
 }
@@ -252,14 +255,14 @@ void						mymutx::		unlock() {
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format("<<< Lock release [eXclu:%d %s]\n") % nb % nam).str());
+			dbglog((format("<<< Lock release [eXclu:%d %s]") % nb % nam).str());
 		#endif
-		upgrade_mutex::unlock();
+		shared_mutex::unlock();
 		#if !defined NDEBUG && defined DBG_SEM
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format("	Lock done [eXclu:%d %s].\n") % nb % nam).str());
+			dbglog((format("	Lock done [eXclu:%d %s].") % nb % nam).str());
 		#endif
 	}
 }
@@ -270,14 +273,14 @@ void						mymutx::		lock_shared() {
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format(">>> Lock request [Share:%d %s]\n") % nb % nam).str());
+			dbglog((format(">>> Lock request [Share:%d %s]") % nb % nam).str());
 		#endif
-		upgrade_mutex::lock_shared();
+		shared_mutex::lock_shared();
 		#if !defined NDEBUG && defined DBG_SEM
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format("	Lock done [Share:%d %s].\n") % nb % nam).str());
+			dbglog((format("	Lock done [Share:%d %s].") % nb % nam).str());
 		#endif
 	}
 }
@@ -288,14 +291,14 @@ void						mymutx::		unlock_shared() {
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format("<<< Lock release [Share:%d %s]\n") % nb % nam).str());
+			dbglog((format("<<< Lock release [Share:%d %s]") % nb % nam).str());
 		#endif
-		upgrade_mutex::unlock_shared();
+		shared_mutex::unlock_shared();
 		#if !defined NDEBUG && defined DBG_SEM
 			#ifdef DBGSEM
 				if(nam == DBGSEM)
 			#endif
-			dbglog((format("	Lock done [Share:%d %s].\n") % nb % nam).str());
+			dbglog((format("	Lock done [Share:%d %s].") % nb % nam).str());
 		#endif
 	}
 }
@@ -331,7 +334,7 @@ int							fatx_context::	setup() {
 	if(fat == nullptr)
 		return ENOMEM;
 	#if !defined NDEBUG && defined DBG_INIT
-		dbglog("::EOMAP\n");
+		dbglog("::EOMAP");
 	#endif
 	if(mmi.prog != frontend::mkfs) {
 		root = new entry();
@@ -340,7 +343,7 @@ int							fatx_context::	setup() {
 			return ENOMEM;
 		}
 		#if !defined NDEBUG && defined DBG_INIT
-			dbglog("::EOENT\n");
+			dbglog("::EOENT");
 		#endif
 	}
 	return res;
@@ -474,7 +477,7 @@ int							frontend::		setup() {
 	if(prog == unrm)
 		recover	= true;
 	#ifndef NDEBUG
-		dbglog((format("=> CALL: %s\n") % name()).str());
+		dbglog((format("=> CALL: %s") % name()).str());
 	#endif
 	if(prog != fuse && prog != fsck && prog != mkfs && prog != unrm && prog != label) {
 		console::write(
@@ -510,15 +513,30 @@ int							frontend::		setup() {
 			"\"x1\"  for original Xbox compatibility partition,\n"
 			"\"x2\"  for data partition (default)"
 		)
-		("table,b", value<string>()->default_value("hd"),
-			"select partition table:\n"
-			"\"file\" for plain file,\n"
-			"\"mu\"   for memory unit,\n"
-			"\"usb\"  for USB drive,\n"
-			"\"hd\"   for Xbox 360 retail hard disk (default),\n"
-			"\"kit\"  for devkit hard disk"
-		 )
 	;
+	if(prog == mkfs) {
+		visible.add_options()
+			("table,b", value<string>()->default_value("hd"),
+				"select partition table:\n"
+				"\"file\" for plain file,\n"
+				"\"mu\"   for memory unit,\n"
+				"\"hd\"   for Xbox 360 retail hard disk (default),\n"
+				"\"kit\"  for devkit hard disk"
+			 )
+		;
+	}
+	else {
+		visible.add_options()
+			("table,b", value<string>()->default_value("hd"),
+				"select partition table:\n"
+				"\"file\" for plain file,\n"
+				"\"mu\"   for memory unit,\n"
+				"\"usb\"  for USB drive,\n"
+				"\"hd\"   for Xbox 360 retail hard disk (default),\n"
+				"\"kit\"  for devkit hard disk"
+			 )
+		;
+	}
 	if(prog == fuse) {
 		visible.add_options()
 			("mount,m", value<string>(), "set mountpoint")
@@ -734,8 +752,26 @@ int							frontend::		setup() {
 		);
 		return EPERM;
 	}
-	if(prog == mkfs && table == "usb") {
-		console::write("Can't make filesystem for USB drive.\n");
+	if(
+		partition != "sc" &&
+		partition != "gc" &&
+		partition != "se1" &&
+		partition != "se2" &&
+		partition != "xdv" &&
+		partition != "x1" &&
+		partition != "x2"
+	) {
+		console::write("Bad partition type.\n");
+		return EINVAL;
+	}
+	if(
+		table != "file" &&
+		table != "mu" &&
+		table != "hd" &&
+		(prog == mkfs || table != "usb") &&
+		table != "kit"
+	) {
+		console::write("Bad partition table type.\n");
 		return EINVAL;
 	}
 	if(varmap.count("help") || !varmap.count("input") || (prog == fuse && !varmap.count("mount"))) {
@@ -745,7 +781,7 @@ int							frontend::		setup() {
 		return EINVAL;
 	}
 	#if !defined NDEBUG && defined DBG_INIT
-		dbglog("::EOMMI\n");
+		dbglog("::EOMMI");
 	#endif
 	return 0;
 }
@@ -786,7 +822,7 @@ void						frontend::		parser() {
 				continue;
 			}
 			entry* n = fatx_context::get()->root->find(i->data());
-			if(n == nullptr || !n->flags().dir) {
+			if(n == nullptr || !n->flags.dir) {
 				console::write("not found\n");
 				continue;
 			}
@@ -795,7 +831,7 @@ void						frontend::		parser() {
 				continue;
 			}
 			console::write(n->path() + "\n");
-			n->parent()->remfrdir(n);
+			n->parent->remfrdir(n, true);
 		}
 		else if(*i == "cp" && ++i != args.end() && !i->empty()) {
 			console::write("cp:");
@@ -818,11 +854,11 @@ void						frontend::		parser() {
 				console::write("not found\n");
 				continue;
 			}
-			entry* n = new entry(i->substr(l + 1), s->size());
+			entry* n = new entry(i->substr(l + 1), s->size);
 			d->addtodir(n);
-			string b(s->size(), '\0');
-			s->data(&b[0], true, 0, s->size());
-			n->data(&b[0], false, 0, n->size());
+			string b(s->size, '\0');
+			s->data(&b[0], true, 0, s->size);
+			n->data(&b[0], false, 0, n->size);
 			console::write(n->path() + "\n");
 		}
 		else if(*i == "rcp" && ++i != args.end() && !i->empty()) {
@@ -851,7 +887,7 @@ void						frontend::		parser() {
 			s.read(&b[0], static_cast<streamsize>(siz));
 			s.close();
 			console::write((format("(%d)") % siz).str());
-			n->data(&b[0], false, 0, n->size());
+			n->data(&b[0], false, 0, n->size);
 			console::write(n->path() + "\n");
 		}
 		else if(*i == "lcp" && ++i != args.end() && !i->empty()) {
@@ -870,10 +906,10 @@ void						frontend::		parser() {
 			}
 			ofstream d(i->data(), ios::binary | ios::trunc);
 			d.seekp(0, ios::beg);
-			string b(s->size(), '\0');
-			s->data(&b[0], true, 0, s->size());
-			console::write((format("(%d)") % s->size()).str());
-			d.write(&b[0], static_cast<streamsize>(s->size()));
+			string b(s->size, '\0');
+			s->data(&b[0], true, 0, s->size);
+			console::write((format("(%d)") % s->size).str());
+			d.write(&b[0], static_cast<streamsize>(s->size));
 			d.close();
 			console::write(*i + "\n");
 		}
@@ -898,18 +934,18 @@ void						frontend::		parser() {
 				continue;
 			}
 			entry* n = fatx_context::get()->root->find(i->data());
-			if(n == nullptr || n->flags().dir) {
+			if(n == nullptr || n->flags.dir) {
 				console::write("not found\n");
 				continue;
 			}
 			console::write(n->path() + "\n");
-			n->parent()->remfrdir(n);
+			n->parent->remfrdir(n, true);
 		}
 		else if(*i == "lsfat" && ++i != args.end() && !i->empty()) {
 			console::write(*i + ":");
-			entry* e = fatx_context::get()->root->find(i->data());
+			const entry* e = fatx_context::get()->root->find(i->data());
 			if(e != nullptr)
-				console::write(fatx_context::get()->fat->printchain(e->cluster()));
+				console::write(fatx_context::get()->fat->printchain(e->cluster));
 			else
 				console::write("not found");
 			console::write("\n");
@@ -1024,9 +1060,9 @@ void						frontend::		parser() {
 						console::write("*ERR*");
 						break;
 					}
-					e->cluster(n);
+					e->cluster = n;
 					e->save();
-					console::write((format("%s->0x%08X") % e->path() % e->cluster()).str());
+					console::write((format("%s->0x%08X") % e->path() % e->cluster).str());
 				}
 			}
 			else
@@ -1069,15 +1105,15 @@ bool					device::chgfile::	load() {
 		o += s;
 	}
 	#if !defined NDEBUG && defined DBG_INIT
-		dbglog((format("Diff file loaded %s\n") % (size() == 0 ? "(0 segment)." : (format("(%d segment%s):") % size() % (size() == 1 ? "" : "s")).str())).str());
+		dbglog((format("Diff file loaded %s") % (size() == 0 ? "(0 segment)." : (format("(%d segment%s):") % size() % (size() == 1 ? "" : "s")).str())).str());
 		for(auto i: *this)
-			dbglog((format("0x%016X (%d) at 0x%016X\n") % i.first % i.second.size % i.second.position).str());
+			dbglog((format("0x%016X (%d) at 0x%016X") % i.first % i.second.size % i.second.position).str());
 	#endif
 	return false;
 }
 bool					device::chgfile::	read(streamptr p, const size_t s, string &buf) {
 	#if !defined NDEBUG && defined DBG_DIFF
-		dbglog((format("=>  Read diffile at 0x%016X(%d)\n") % p % s).str());
+		dbglog((format("=>  Read diffile at 0x%016X(%d)") % p % s).str());
 	#endif
 	auto b = lower_bound(p);		// *b >= p
 	if(b != begin()) {
@@ -1104,7 +1140,7 @@ bool					device::chgfile::	read(streamptr p, const size_t s, string &buf) {
 			c = i->first - p;
 		auto siz = min<filesize>(buf.size() - c, i->second.size - (i->first < p ? p - i->first : 0));
 		#if !defined NDEBUG && defined DBG_DIFF
-			dbglog((format("... read diffile at 0x%016X [0x%016X(%d)]\n") % pos % (p + c) % siz).str());
+			dbglog((format("... read diffile at 0x%016X [0x%016X(%d)]") % pos % (p + c) % siz).str());
 		#endif
 		bool status = false;
 		status = status || !iod.seekg(static_cast<std::basic_istream<char>::off_type>(pos), ios::beg);
@@ -1119,7 +1155,7 @@ bool					device::chgfile::	read(streamptr p, const size_t s, string &buf) {
 }
 bool					device::chgfile::	write(streamptr p, const string &buf) {
 	#if !defined NDEBUG && defined DBG_DIFF
-		dbglog((format("=>  Write diffile at 0x%016X(%d)\n") % p % buf.size()).str());
+		dbglog((format("=>  Write diffile at 0x%016X(%d)") % p % buf.size()).str());
 	#endif
 	auto b = lower_bound(p); // *b >= p
 	if(b != begin()) {
@@ -1149,7 +1185,7 @@ bool					device::chgfile::	write(streamptr p, const string &buf) {
 			pos += p - i->first;
 		auto siz = min<filesize>(buf.size() - (l - p), i->second.size - (i->first < p ? p - i->first : 0));
 		#if !defined NDEBUG && defined DBG_DIFF
-			dbglog((format("... write diffile at 0x%016X [0x%016X(%d)]\n") % pos % l % siz).str());
+			dbglog((format("... write diffile at 0x%016X [0x%016X(%d)]") % pos % l % siz).str());
 		#endif
 		bool status = false;
 		status = status || !iod.seekp(static_cast<std::basic_istream<char>::off_type>(pos), ios::beg);
@@ -1184,7 +1220,7 @@ bool					device::chgfile::	addseg(streamptr p, const string& buf) {
 		return true;
 	}
 	#if !defined NDEBUG && defined DBG_DIFF
-		dbglog((format("... add segment at 0x%016X [0x%016X(%d)]\n") % seg.position % p % s).str());
+		dbglog((format("... add segment at 0x%016X [0x%016X(%d)]") % seg.position % p % s).str());
 	#endif
 	insert(make_pair(p, seg));
 	return false;
@@ -1338,7 +1374,7 @@ int							device::		setup() {
 		err = err || !f.read(&buf[0], static_cast<streamsize>(8));
 		streamptr dts = err ? 0 : byte_order<8>::litend(&buf[0])();
 		#if !defined NDEBUG && defined DBG_INIT
-			dbglog((format("USB Data of size: %u.\n") % dts).str());
+			dbglog((format("USB Data of size: %u.") % dts).str());
 		#endif
 		if(f)
 			f.close();
@@ -1365,7 +1401,7 @@ int							device::		setup() {
 					cts += s;
 			}
 			#if !defined NDEBUG && defined DBG_INIT
-				dbglog((format("USB Data file %s at %u -> %u (%u).\n") % (path + buf) % p % (p + s) % s).str());
+				dbglog((format("USB Data file %s at %u -> %u (%u).") % (path + buf) % p % (p + s) % s).str());
 			#endif
 			p += err ? 0 : s;
 			i++;
@@ -1376,7 +1412,7 @@ int							device::		setup() {
 	if(!err && !fatx_context::get()->mmi.diffile.empty()) {
 		err = err || !(iod = fstream(fatx_context::get()->mmi.diffile, ios::binary | (fatx_context::get()->mmi.writeable() ? (ios::out | ios::in) : ios::in)), iod);
 		#if !defined NDEBUG && defined DBG_INIT
-			dbglog((format("Diff file requested in %s mode.\n") % (fatx_context::get()->mmi.writeable() ? "write" : "read")).str());
+			dbglog((format("Diff file requested in %s mode.") % (fatx_context::get()->mmi.writeable() ? "write" : "read")).str());
 		#endif
 		err = err || !iod.seekg(0);
 		err = err || !iod.seekg(0, ios::end);
@@ -1401,7 +1437,7 @@ int							device::		setup() {
 		).str(), true);
 	}
 	#if !defined NDEBUG && defined DBG_INIT
-		dbglog("::EODEV\n");
+		dbglog("::EODEV");
 	#endif
 	return err ? EIO : 0;
 }
@@ -1524,11 +1560,11 @@ int							fatxpar::		setup() {
 	if(cap.find("mu") != cap.end() && cap.find("mu")->second.size() == sch["mu"].size() && cap.find("file") != cap.end())
 		cap.erase("file");
 	#ifndef NDEBUG
-		dbglog("CAPACITY:\n");
+		dbglog("CAPACITY:");
 		for(const auto &i: cap) {
-			dbglog("  " + i.first + "\n");
+			dbglog("  " + i.first + "");
 			for(const auto &j: i.second)
-				dbglog("    " + j + "\n");
+				dbglog("    " + j + "");
 		}
 	#endif
 	if(
@@ -1652,15 +1688,15 @@ int							fatxpar::		setup() {
 		}
 	}
 	#ifndef NDEBUG
-		dbglog((format("PAR size  : %d\n") % par_size).str());
-		dbglog((format("CLS size  : %d (%d)\n") % clus_size % clus_pow).str());
-		dbglog((format("CLS num   : %d\n") % clus_num).str());
-		dbglog((format("FAT start : 0x%016X\n") % fat_start).str());
-		dbglog((format("FAT cls   : %d\n") % clus_fat).str());
-		dbglog((format("ROOT start: 0x%016X (0x%08X)\n") % root_start % root_clus).str());
+		dbglog((format("PAR size  : %d") % par_size).str());
+		dbglog((format("CLS size  : %d (%d)") % clus_size % clus_pow).str());
+		dbglog((format("CLS num   : %d") % clus_num).str());
+		dbglog((format("FAT start : 0x%016X") % fat_start).str());
+		dbglog((format("FAT cls   : %d") % clus_fat).str());
+		dbglog((format("ROOT start: 0x%016X (0x%08X)") % root_start % root_clus).str());
 	#endif
 	#if !defined NDEBUG && defined DBG_INIT
-		dbglog("::EOPAR\n");
+		dbglog("::EOPAR");
 	#endif
 	return 0;
 }
@@ -1873,7 +1909,7 @@ void						dskmap::		erase() {
 void						dskmap::		gapcheck() {
 	authm.lock();
 	#ifndef NDEBUG
-		dbglog((format("Calculating free gaps out of %d FAT entries...\n") % fatx_context::get()->par.clus_fat).str());
+		dbglog((format("Calculating free gaps out of %d FAT entries...") % fatx_context::get()->par.clus_fat).str());
 	#endif
 	freegaps.clear();
 	mapptr_t b = 0;
@@ -1895,7 +1931,7 @@ void						dskmap::		gapcheck() {
 	if(b != 0)
 		freegaps.insert(gap_t::value_type(b, s));
 	#if !defined NDEBUG && defined DBG_GAPS
-		dbglog("Gaps:\n");
+		dbglog("Gaps:");
 		printgaps();
 	#endif
 	authm.unlock();
@@ -2042,7 +2078,7 @@ void						dskmap::		freefat(clusptr o) {
 	}
 	for(area i: va) {
 		#ifndef NDEBUG
-			dbglog((format("*** FAT free:  %d cluster%s starting at 0x%08X.\n") % (i.stop - i.start + 1) % ((i.stop - i.start) > 0 ? "s" : "") % i.start).str());
+			dbglog((format("*** FAT free:  %d cluster%s starting at 0x%08X.") % (i.stop - i.start + 1) % ((i.stop - i.start) > 0 ? "s" : "") % i.start).str());
 		#endif
 		gap_t::left_map::iterator next = freegaps.left.upper_bound(i.start);
 		gap_t::left_map::iterator prev = next;
@@ -2147,7 +2183,7 @@ string						dskmap::		printchain(clusptr orig) {
 #ifndef NDEBUG
 void						dskmap::		printgaps() const {
 	for(const auto& i: freegaps.left)
-		dbglog((format("%08X: %d cluster%s free\n") % i.first % i.second % (i.second > 1 ? "s": "")).str());
+		dbglog((format("%08X: %d cluster%s free") % i.first % i.second % (i.second > 1 ? "s": "")).str());
 }
 void						dskmap::		printfat() {
 	console::write(string("Invalid call to :") + __FUNCTION__ + "\n", true);
@@ -2230,8 +2266,8 @@ void						memmap::		fatcheck() {
 				if(fatx_context::get()->mmi.getanswer(false)) {
 					if(fatx_context::get()->mmi.local) {
 						ptr_entry f(new entry((format("%s%03d") % fatx_context::get()->mmi.foundfile % fatx_context::get()->mmi.filecount++).str()));
-						f->cluster(va.first());
-						f->size(va.nbcls() * fatx_context::get()->par.clus_size);
+						f->cluster = va.first();
+						f->size = va.nbcls() * fatx_context::get()->par.clus_size;
 						f->recover();
 					}
 					else {
@@ -2245,18 +2281,18 @@ void						memmap::		fatcheck() {
 						}
 						else {
 							// we find the latest file number
-							for(entry& e: lf->childs) {
+							for(const entry& e: lf->childs) {
 								unsigned int n;
-								if(sscanf(e.name(), (string(def_fpre) + "%3d").data(), &n) == 1)
+								if(sscanf(e.name, (string(def_fpre) + "%3d").data(), &n) == 1)
 									fatx_context::get()->mmi.filecount = max<unsigned int>(fatx_context::get()->mmi.filecount, n + 1);
 							}
 						}
 						// we create the file and put it in lost+found
 						entry* f = new entry((format("%s%03d") % fatx_context::get()->mmi.foundfile % fatx_context::get()->mmi.filecount++).str(), 0);
-						f->size(va.nbcls() * fatx_context::get()->par.clus_size);
-						f->cluster(va.first());
+						f->size = va.nbcls() * fatx_context::get()->par.clus_size;
+						f->cluster = va.first();
 						if(lf->addtodir(f))
-							console::write((format("Unable to create file %s.\n") % f->name()).str(), fatx_context::get()->mmi.dialog);
+							console::write((format("Unable to create file %s.\n") % f->name).str(), fatx_context::get()->mmi.dialog);
 					}
 				}
 			}
@@ -2278,12 +2314,12 @@ void						memmap::		printfat() {
 			)) ||
 			i == fatx_context::get()->par.clus_fat
 		) {
-			dbglog((format("%s %s%s\n")
+			dbglog((format("%s %s%s")
 				% (
 					!empty ? (
 						(s == disk) ? "LOST" :
-						(s == marked) ? ((getentry(ent->cluster()) == ent) ? ((ent->cluster() == l) ? "OK  " : "OK->") : "*ERR") :
-						(s == deleted) ? ((getentry(ent->cluster()) == ent) ? ((ent->cluster() == l) ? "DEL " : "DEL>") : "*BAD") :
+						(s == marked) ? ((getentry(ent->cluster) == ent) ? ((ent->cluster == l) ? "OK  " : "OK->") : "*ERR") :
+						(s == deleted) ? ((getentry(ent->cluster) == ent) ? ((ent->cluster == l) ? "DEL " : "DEL>") : "*BAD") :
 						"?MOD"
 					) : "...."
 				)
@@ -2294,7 +2330,7 @@ void						memmap::		printfat() {
 				)
 				% (
 					(!empty && s != disk) ?
-					(format("(0x%08X: %s)") % ent->cluster() % ent->path()).str() : ""
+					(format("(0x%08X: %s)") % ent->cluster % ent->path()).str() : ""
 				)
 			).str());
 			empty = (read(i) == FLK) && (dskmap::read(i) == FLK);
@@ -2311,33 +2347,35 @@ void						memmap::		printfat() {
 	mux_B(string() + mutex_buff + "/"),
 	mux_D(string() + mutex_data + "/"),
 	mux_E(string() + mutex_entr + "/"),
+	exclusive(1),
 	entbuf(),
-	v_cptacc(0),
-	v_writeopened(fatx_context::get()->mmi.prog != frontend::fuse),
-	v_status(valid),
-	v_namesize(0),
-	v_flags(),
-	v_cluster(fatx_context::get()->par.root_clus),
-	v_size(0),
-	v_creation(),
-	v_access(),
-	v_update(),
-	v_loc(0),
-	v_parent(this),
+	opened(false),
+	cptacc(0),
+	writeopened(false),
+	status(valid),
+	namesize(0),
+	flags(),
+	cluster(fatx_context::get()->par.root_clus),
+	size(0),
+	creation(),
+	access(),
+	update(),
+	loc(0),
+	parent(this),
 	childs(),
-	v_areas() {
-	memset	(v_name, '\0', name_size + 1);
-	v_flags.dir = true;
+	areas() {
+	memset	(name, '\0', name_size + 1);
+	flags.dir = true;
 	touch();
 	opendir();
-	entry* idx = find(fidx);
-	if(idx != nullptr) {
-		v_creation	= idx->v_creation;
-		v_access	= idx->v_access;
-		v_update	= idx->v_update;
+	entry* elab = find(flab);
+	if(elab != nullptr) {
+		creation = elab->creation;
+		access = elab->access;
+		update = elab->update;
 		unsigned char lab[slab];
-		if(!idx->data(reinterpret_cast<char*>(lab), true, 0, idx->size()))
-			fatx_context::get()->par.label(lab, idx->size());
+		if(!elab->data(reinterpret_cast<char*>(lab), true, 0, elab->size))
+			fatx_context::get()->par.label(lab, elab->size);
 	}
 }
 							// existing entry constructor
@@ -2345,54 +2383,56 @@ void						memmap::		printfat() {
 	mux_B(),
 	mux_D(),
 	mux_E(),
+	exclusive(1),
 	entbuf(),
-	v_cptacc(0),
-	v_writeopened(fatx_context::get()->mmi.prog != frontend::fuse),
-	v_status(invalid),
-	v_namesize(static_cast<uint8_t>(buf != nullptr ? buf[0] : 0)),
-	v_flags(buf != nullptr ? buf[1] : '\0'),
-	v_cluster(buf != nullptr ? byte_order<4>::litend(&buf[0x2C])() : 0),
-	v_size(buf != nullptr ? byte_order<4>::litend(&buf[0x30])() : 0),
-	v_creation(reinterpret_cast<const unsigned char *>((buf != nullptr ? &buf[0x34] : "\0\0\0\0"))),
-	v_access(reinterpret_cast<const unsigned char *>((buf != nullptr ? &buf[0x38] : "\0\0\0\0"))),
-	v_update(reinterpret_cast<const unsigned char *>((buf != nullptr ? &buf[0x3C] : "\0\0\0\0"))),
-	v_loc(s),
-	v_parent(nullptr),
+	opened(false),
+	cptacc(0),
+	writeopened(false),
+	status(invalid),
+	namesize(static_cast<uint8_t>(buf != nullptr ? buf[0] : 0)),
+	flags(buf != nullptr ? buf[1] : '\0'),
+	cluster(buf != nullptr ? byte_order<4>::litend(&buf[0x2C])() : 0),
+	size(buf != nullptr ? byte_order<4>::litend(&buf[0x30])() : 0),
+	creation(reinterpret_cast<const unsigned char *>((buf != nullptr ? &buf[0x34] : "\0\0\0\0"))),
+	access(reinterpret_cast<const unsigned char *>((buf != nullptr ? &buf[0x38] : "\0\0\0\0"))),
+	update(reinterpret_cast<const unsigned char *>((buf != nullptr ? &buf[0x3C] : "\0\0\0\0"))),
+	loc(s),
+	parent(nullptr),
 	childs(),
-	v_areas() {
+	areas() {
 	const string nchar = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&'()-.@[]^_`{}~ ";
-	v_status = (
+	status = (
 		// 0xFF or 0x00 on 2 firsts bytes = end of entries
 		(buf == nullptr || (buf[0] == EOD && buf[1] == EOD) || (buf[0] == 0 && buf[1] == 0)) ? end : (
 			(
-				// invalid = invalid v_cluster (we scan something else than an entry) or invalid name
-				v_cluster > fatx_context::get()->par.clus_fat) || any_of(buf + 2, buf + 2 + (v_namesize <= name_size ? v_namesize : 2), [&] (char c) { return nchar.find(c) == std::string::npos; }) ? invalid : (
-				// valid entry = good name size + v_cluster not free in FAT
-				(v_namesize <= name_size && ((v_size == 0 && v_cluster == 0) || (v_cluster != 0 && fatx_context::get()->fat->dskmap::read(v_cluster) != FLK))) ? valid : (
+				// invalid = invalid cluster (we scan something else than an entry) or invalid name
+				cluster > fatx_context::get()->par.clus_fat) || any_of(buf + 2, buf + 2 + (namesize <= name_size ? namesize : 2), [&] (char c) { return nchar.find(c) == std::string::npos; }) ? invalid : (
+				// valid entry = good name size + cluster not free in FAT
+				(namesize <= name_size && ((size == 0 && cluster == 0) || (cluster != 0 && fatx_context::get()->fat->dskmap::read(cluster) != FLK))) ? valid : (
 					(
-						// recoverable entry = entry with v_cluster not allocated to something else
-						(v_cluster == 0 && !v_flags.dir) || (
-							v_cluster != 0 && fatx_context::get()->fat->dskmap::read(v_cluster) == FLK && (
+						// recoverable entry = entry with cluster not allocated to something else
+						(cluster == 0 && !flags.dir) || (
+							cluster != 0 && fatx_context::get()->fat->dskmap::read(cluster) == FLK && (
 							typeid(fatx_context::get()->fat) != typeid(memmap*) || (
-								fatx_context::get()->fat->status(v_cluster) == memmap::deleted &&
-								!fatx_context::get()->fat->getentry(v_cluster)->v_flags.dir &&
-								fatx_context::get()->fat->getentry(v_cluster)->v_update.seq() < v_update.seq()
+								fatx_context::get()->fat->status(cluster) == memmap::deleted &&
+								!fatx_context::get()->fat->getentry(cluster)->flags.dir &&
+								fatx_context::get()->fat->getentry(cluster)->update.seq() < update.seq()
 							))
 						)
-					) ? delwdata : (v_flags.dir ? invalid : delnodata)
+					) ? delwdata : (flags.dir ? invalid : delnodata)
 				)
 			)
 		)
 	);
 	// cleaning name
-	memset(v_name, '\0', name_size + 1);
+	memset(name, '\0', name_size + 1);
 	if(buf != nullptr)
-		memcpy(v_name, &buf[2], (v_namesize <= name_size) ? v_namesize : name_size);
-	if(v_status != end && ((v_namesize != deleted_size && v_namesize != strlen(v_name)) || strlen(v_name) == 0 || v_name[0] == sepdir[0]))
-			v_status = invalid;
-	if(v_status != end && v_status != invalid) {
-		for(size_t i = 0; i < strlen(v_name); i++)
-			v_name[i] = (v_name[i] == EOD) ? '\0' : nchar.find(v_name[i]) == std::string::npos ? '~' : v_name[i];
+		memcpy(name, &buf[2], (namesize <= name_size) ? namesize : name_size);
+	if(status != end && ((namesize != deleted_size && namesize != strlen(name)) || strlen(name) == 0 || name[0] == sepdir[0]))
+			status = invalid;
+	if(status != end && status != invalid) {
+		for(size_t i = 0; i < strlen(name); i++)
+			name[i] = (name[i] == EOD) ? '\0' : nchar.find(name[i]) == std::string::npos ? '~' : name[i];
 	}
 	mux_B.name(mutex_buff + path());
 	mux_D.name(mutex_data + path());
@@ -2403,94 +2443,100 @@ void						memmap::		printfat() {
 	mux_B(),
 	mux_D(),
 	mux_E(),
+	exclusive(1),
 	entbuf(),
-	v_cptacc(0),
-	v_writeopened(fatx_context::get()->mmi.prog != frontend::fuse),
-	v_status(invalid),
-	v_namesize(0),
-	v_flags(),
-	v_cluster(0),
-	v_size(d ? 0 : s),
-	v_creation(),
-	v_access(),
-	v_update(),
-	v_loc(0),
-	v_parent(nullptr),
+	opened(false),
+	cptacc(0),
+	writeopened(false),
+	status(invalid),
+	namesize(0),
+	flags(),
+	cluster(0),
+	size(d ? 0 : s),
+	creation(),
+	access(),
+	update(),
+	loc(0),
+	parent(nullptr),
 	childs(),
-	v_areas() {
-	v_areas = make_shared<vareas>(fatx_context::get()->fat->alloc(d ? 1 : clsarithm::siz2cls(s)));
-	v_cluster = (!d && s == 0) ? FLK : v_areas->first();
-	if(v_cluster == 0)
-		v_size		= 0;
-	v_namesize		= static_cast<uint8_t>((n.length() <= name_size) ? n.length() : name_size);
-	memset			(v_name, '\0', name_size + 1);
-	strncpy			(v_name, &n[0], v_namesize);
-	mux_B.name(mutex_buff + string(v_name));
-	mux_D.name(mutex_data + string(v_name));
-	mux_E.name(mutex_entr + string(v_name));
-	v_flags.dir		= d;
+	areas() {
+	areas = make_shared<vareas>(fatx_context::get()->fat->alloc(d ? 1 : clsarithm::siz2cls(s)));
+	cluster = (!d && s == 0) ? FLK : areas->first();
+	if(cluster == 0)
+		size = 0;
+	namesize = static_cast<uint8_t>((n.length() <= name_size) ? n.length() : name_size);
+	memset(name, '\0', name_size + 1);
+	strncpy(name, &n[0], namesize);
+	mux_B.name(mutex_buff + string(name));
+	mux_D.name(mutex_data + string(name));
+	mux_E.name(mutex_entr + string(name));
+	flags.dir = d;
 	touch();
-	if(d && v_cluster != 0)
-		entry(clsarithm::cls2ptr(v_cluster)).write();
+	if(d && cluster != 0)
+		entry(clsarithm::cls2ptr(cluster)).write();
 }
 							entry::			~entry() {
 	flush(false);
 	mux_D.lock();
 	entbuf.reset();
 	childs.clear();
-	v_parent = nullptr;
-	v_areas.reset();
+	parent = nullptr;
+	areas.reset();
 	mux_D.unlock();
 }
 
 #ifndef NDEBUG
 string						entry::			print() {
-	return "-> entry " + ((status() == end) ? "*END*\n" : (format("'%s' : %s, 0x%08X->0x%08X (%d) at %s\n		(%s, C=>%s A=>%s U=>%s, 0x%02X)\n")
-		% ((status() == invalid) ? "*INVALID*" : path())
-		% ((status() == invalid) ? "bad" : (status() == valid) ? "ok" : (status() == delwdata) ? "del" : "ko")
-		% cluster()
-		% ((cluster() != FLK && cluster() != EOC && cluster() <= fatx_context::get()->par.clus_fat) ? fatx_context::get()->fat->dskmap::read(cluster()) : 0)
-		% size()
-		% fatx_context::get()->dev.address(loc())
-		% flags().print()
-		% creation().print()
-		% access().print()
-		% update().print()
-		% static_cast<unsigned int>(namesize())
+	return "-> entry " + ((status == end) ? "*END*\n" : (format("'%s' : %s, 0x%08X->0x%08X (%d) at %s\n		(%s, C=>%s A=>%s U=>%s, 0x%02X)\n")
+		% ((status == invalid) ? "*INVALID*" : path())
+		% ((status == invalid) ? "bad" : (status == valid) ? "ok" : (status == delwdata) ? "del" : "ko")
+		% cluster
+		% ((cluster != FLK && cluster != EOC && cluster <= fatx_context::get()->par.clus_fat) ? fatx_context::get()->fat->dskmap::read(cluster) : 0)
+		% size
+		% fatx_context::get()->dev.address(loc)
+		% flags.print()
+		% creation.print()
+		% access.print()
+		% update.print()
+		% static_cast<unsigned int>(namesize)
 	).str());
 }
 #endif
 string						entry::			path() {
 	return (
-		(cluster() == fatx_context::get()->par.root_clus) ? string(sepdir) : (
-		((parent() != nullptr) ? parent()->path() : (string(def_landf) + sepdir)) + name() + (flags().dir ? sepdir : "")
+		(cluster == fatx_context::get()->par.root_clus) ? string(sepdir) : (
+		((parent != nullptr) ? parent->path() : (string(def_landf) + sepdir)) + name + (flags.dir ? sepdir : "")
 	));
 }
 void						entry::			opendir() {
-	if(status() == end || status() == invalid || !flags().dir || cluster() == FLK || cluster() == EOC)
+	if(status == end || status == invalid || !flags.dir || cluster == FLK || cluster == EOC) {
+		#ifndef NDEBUG
+			dbglog((format("**> can't opendir %s (status %d)") % path() % status).str());
+		#endif
 		return;
+	}
 	bool marked		= false;
 	bool bad		= false;
-	for(clusptr clus_curr = cluster(); clus_curr != EOC && clus_curr != FLK && !(marked && !fatx_context::get()->mmi.recover); clus_curr = fatx_context::get()->fat->read(clus_curr)) {
+	for(clusptr clus_curr = cluster; clus_curr != EOC && clus_curr != FLK && !(marked && !fatx_context::get()->mmi.recover); clus_curr = fatx_context::get()->fat->read(clus_curr)) {
 		string buf = fatx_context::get()->dev.read(clsarithm::cls2ptr(clus_curr), fatx_context::get()->par.clus_size);
 		for(size_t i = 0; i < fatx_context::get()->par.clus_size && !(marked && !fatx_context::get()->mmi.recover); i += ent_size) {
 			entry* ent = new entry(clsarithm::cls2ptr(clus_curr) + i, &buf[i]);
-			ent->parent(this);
+			ent->parent = this;
 			ent->mux_B.name(mutex_buff + ent->path());
 			ent->mux_D.name(mutex_data + ent->path());
 			ent->mux_E.name(mutex_entr + ent->path());
-			if(ent->status() == end)
+			if(ent->status == end)
 				marked = true;
-			if(ent->status() == invalid && !marked)
+			if(ent->status == invalid && !marked)
 				bad = true;
-			if(ent->status() == end || ent->status() == invalid) {
+			if(ent->status == end || ent->status == invalid) {
 				delete ent;
 				ent = nullptr;
 				continue;
 			}
-			if(marked && ent->status() == valid)
-				ent->status(delwdata);
-			if(!fatx_context::get()->mmi.recover && ent->status() != valid) {
+			if(marked && ent->status == valid)
+				ent->status = delwdata;
+			if(!fatx_context::get()->mmi.recover && ent->status != valid) {
 				delete ent;
 				ent = nullptr;
 				continue;
@@ -2498,29 +2544,27 @@ void						entry::			opendir() {
 			#ifndef NDEBUG
 				dbglog(ent->print());
 			#endif
-			if(ent->status() == valid) {
-				mux_E.lock_shared();
+			if(ent->status == valid) {
 				for(entry& e: childs) {
-					if(e.status() == valid && ent->namesize() == e.namesize() && strncmp(ent->name(), e.name(), ent->namesize()) == 0) {
+					if(e.status == valid && ent->namesize == e.namesize && strncmp(ent->name, e.name, ent->namesize) == 0) {
 						// duplicate reference case
 						if(fatx_context::get()->mmi.prog != frontend::fsck && !fatx_context::get()->mmi.recover)
-							console::write((format("Duplicate reference in same directory %s for entry %s.\n") % path() % ent->name()).str(), fatx_context::get()->mmi.dialog);
-						ent->status(duplicate);
-						e.status(duplicate);
+							console::write((format("Duplicate reference in same directory %s for entry %s.\n") % path() % ent->name).str(), fatx_context::get()->mmi.dialog);
+						ent->status = duplicate;
+						e.status = duplicate;
 						break;
 					}
 				}
-				mux_E.unlock_shared();
 			}
-			if(ent->flags().dir) {
+			if(ent->flags.dir) {
 				bool del = false;
 				// check if no circular reference
-				for(entry* e = this; ; e = e->parent()) {
-					if(e == nullptr || e->loc() == 0)
+				for(entry* e = this; ; e = e->parent) {
+					if(e == nullptr || e->loc == 0)
 						break;
-					if(e->status() != valid)
+					if(e->status != valid)
 						del = true;
-					if(ent->cluster() == e->cluster()) {
+					if(ent->cluster == e->cluster) {
 						// circular reference case
 						if(!del) {
 							console::write((format("Circular reference for entry %s found in %s.") % ent->path() % path()).str(), fatx_context::get()->mmi.dialog);
@@ -2545,32 +2589,28 @@ void						entry::			opendir() {
 				if(ent == nullptr)
 					continue;
 			}
-			mux_E.lock();
 			childs.push_back(ent);
-			mux_E.unlock();
 			ent = nullptr;
-			mux_E.lock_shared();
-			if(childs.back().flags().dir && childs.back().status() != delnodata) {
+			if(childs.back().flags.dir && childs.back().status != delnodata) {
 				// go one step deep
 				childs.back().opendir();
 			}
-			mux_E.unlock_shared();
 		}
 		if(!marked && fatx_context::get()->fat->read(clus_curr) == EOC)
 			marked = true;
 	}
-	if(status() == valid && !marked)
+	if(status == valid && !marked)
 		closedir();
 	if(childs.empty() && bad)
-		status(delnodata);
+		status = delnodata;
 }
 void						entry::			closedir() {
-	if(!flags().dir)
+	if(!flags.dir)
 		return;
 	bool closed = false;
 	clusptr j = 0;
 	for(
-		clusptr i = cluster();
+		clusptr i = cluster;
 		!closed && i != EOC && i != FLK;
 		i = fatx_context::get()->fat->read(i)
 	) {
@@ -2595,28 +2635,31 @@ void						entry::			closedir() {
 		}
 		else {
 			console::write(" Closing.\n", fatx_context::get()->mmi.dialog);
-			mux_E.lock();
 			entry(j).write();
-			mux_E.unlock();
 		}
 	}
 }
 int							entry::			addtodir(entry* e) {
-	if(e == nullptr || !flags().dir || cluster() == 0 || (e->flags().dir && e->cluster() == 0))
+	if(!flags.dir || e == nullptr || e == fatx_context::get()->root || e == this || e->flags.lab ||  cluster == 0 || (e->flags.dir && e->cluster == 0)) {
+		#ifndef NDEBUG
+			dbglog((format("**> can't add %s") % path()).str());
+		#endif
 		return EFAULT;
+	}
+	mux_E.lock();
 	mux_D.lock();
-	mux_E.lock_shared();
-	for(entry& i: childs) {
-		if(i.namesize() == e->namesize() && strncmp(i.name(), e->name(), i.namesize()) == 0) {
-			mux_E.unlock_shared();
+	for(const entry& i: childs) {
+		if(i.namesize == e->namesize && strncmp(i.name, e->name, i.namesize) == 0 && (
+			i.status == entry::valid || (fatx_context::get()->mmi.recover && i.status == entry::delwdata)
+		)) {
 			mux_D.unlock();
+			mux_E.unlock();
 			return EEXIST;
 		}
 	}
-	mux_E.unlock_shared();
 	streamptr endp = 0;
 	streamptr del = 0;
-	for(clusptr i = cluster(); endp == 0 && i != EOC && i != FLK; i = fatx_context::get()->fat->read(i)) {
+	for(clusptr i = cluster; endp == 0 && i != EOC && i != FLK; i = fatx_context::get()->fat->read(i)) {
 		string buf = fatx_context::get()->dev.read(clsarithm::cls2ptr(i), fatx_context::get()->par.clus_size);
 		for(size_t j = 0; j < fatx_context::get()->par.clus_size; j += ent_size) {
 			if(buf[j] == EOD && buf[j + 1] == EOD) {
@@ -2629,88 +2672,81 @@ int							entry::			addtodir(entry* e) {
 	}
 	if(endp != 0) {
 		// we have enough space in directory to add one more entry
-		e->loc(endp);
-		e->status(entry::valid);
+		e->loc = endp;
+		e->status = entry::valid;
 		if(
 			(((endp + ent_size - fatx_context::get()->par.root_start) >> fatx_context::get()->par.clus_pow) << fatx_context::get()->par.clus_pow) !=
 			(endp + ent_size - fatx_context::get()->par.root_start)
 		) {
 			// we must mark the end of entries
-			mux_E.lock();
-			entry(e->loc() + ent_size).write();
-			mux_E.unlock();
+			entry(e->loc + ent_size).write();
 		}
 	}
 	else {
 		// we search a deleted entry
 		if(del != 0) {
 			// we found one, and use it
-			e->loc(del);
-			e->status(entry::valid);
+			e->loc = del;
+			e->status = entry::valid;
 		}
 		else {
 			// we have to allocate one cluster more in the directory
-			if(!areas() || areas()->empty()) {
-				areas(make_shared<vareas>(fatx_context::get()->fat->getareas(cluster())));
-				if(areas()->empty()) {
+			if(!areas || areas->empty()) {
+				areas = make_shared<vareas>(fatx_context::get()->fat->getareas(cluster));
+				if(areas->empty()) {
 					mux_D.unlock();
+					mux_E.unlock();
 					return EFAULT;
 				}
 			}
 			int res = 0;
-			if((res = fatx_context::get()->fat->resize(areas(), areas()->nbcls() + 1))) {
+			if((res = fatx_context::get()->fat->resize(areas, areas->nbcls() + 1))) {
 				mux_D.unlock();
+				mux_E.unlock();
 				return res;
 			}
-			e->loc(clsarithm::cls2ptr(areas()->last()));
-			e->status(entry::valid);
+			e->loc = clsarithm::cls2ptr(areas->last());
+			e->status = entry::valid;
 			// we must mark the end of entries
-			mux_E.lock();
-			entry(e->loc() + ent_size).write();
-			mux_E.unlock();
+			entry(e->loc + ent_size).write();
 		}
 	}
-	e->parent(this);
-	mux_E.lock();
+	e->parent = this;
 	childs.push_back(e);
 	e->write();
-	mux_E.unlock();
 	touch(false, false, true);
 	int res = save();
 	mux_D.unlock();
+	mux_E.unlock();
 	return res;
 }
 void						entry::			remfrdir(entry* e, bool c) {
-	if((e->status() != valid && e->status() != duplicate) || e->flags().lab)
+	mux_E.lock();
+	if(!flags.dir || e == nullptr || e == fatx_context::get()->root || e == this || e->flags.lab || (e->status != valid && e->status != duplicate)) {
+		mux_E.unlock();
+		#ifndef NDEBUG
+			dbglog((format("**> can't remove %s") % path()).str());
+		#endif
 		return;
+	}
 	if(c) {
-		mux_E.lock_shared();
-		for(entry& f: e->childs) {
-			mux_E.unlock_shared();
-			e->remfrdir(&f);
-			mux_E.lock_shared();
-		}
-		mux_E.unlock_shared();
+		for(entry& f: e->childs)
+			e->remfrdir(&f, true);
 	}
 	mux_D.lock();
-	if(e->cluster() != FLK)
-		fatx_context::get()->fat->freefat(e->cluster());
-	e->status(e->cluster() == FLK ? delnodata : delwdata);
-	mux_E.lock();
+	if(e->cluster != FLK)
+		fatx_context::get()->fat->freefat(e->cluster);
+	e->status = e->cluster == FLK ? delnodata : delwdata;
 	e->write();
-	mux_E.unlock();
 	if(c) {
-		mux_E.lock_shared();
-		auto i = find_if(childs.begin(), childs.end(), [e] (entry& a) -> bool { return &a == e; });
+		auto i = find_if(childs.begin(), childs.end(), [e] (const entry& a) -> bool { return &a == e; });
 		assert(i != childs.end());
-		mux_E.unlock_shared();
-		mux_E.lock();
 		childs.release(i).release();
-		mux_E.unlock();
 	}
 	touch(false, false, true);
 	save();
 	mux_D.unlock();
+	mux_E.unlock();
 	return;
 }
 entry*						entry::			find(const char* path) {
@@ -2721,11 +2757,11 @@ entry*						entry::			find(const char* path) {
 		src.erase(src.size() - 1);
 	tokenizer<char_separator<char> >		dirs(src, sep);
 	bool									found = true;
-	for (const string &d : dirs) {
+	for(const string &d : dirs) {
 		found = false;
 		res->mux_E.lock_shared();
 		for(entry& e: res->childs) {
-			if(e.status() == entry::valid && ((fatx_context::get()->mmi.cutname) ? e.name() == d.substr(0, name_size) : e.name() == d)) {
+			if(e.status == entry::valid && ((fatx_context::get()->mmi.cutname) ? e.name == d.substr(0, name_size) : e.name == d)) {
 				found = true;
 				res->mux_E.unlock_shared();
 				res	= &e;
@@ -2734,7 +2770,7 @@ entry*						entry::			find(const char* path) {
 		}
 		if(!found && fatx_context::get()->mmi.recover) {
 			for(entry& e: res->childs) {
-				if(e.name() == d.substr(0, name_size)) {
+				if(e.name == d.substr(0, name_size)) {
 					found = true;
 					res->mux_E.unlock_shared();
 					res	= &e;
@@ -2747,99 +2783,120 @@ entry*						entry::			find(const char* path) {
 			break;
 		}
 	}
-	if(!found)
-		res = nullptr;
-	return res;
+	return !found ? nullptr : res;
 }
 void						entry::			touch(bool cre, bool acc, bool upd) {
 	time_t t = std::time(nullptr);
 	if(cre)
-		creation(date(t));
+		creation = date(t);
 	if(acc)
-		access(date(t));
+		access = date(t);
 	if(upd)
-		update(date(t));
+		update = date(t);
 }
 int							entry::			write() {
-	if(status() == invalid)
+	if(status == invalid)
 		return EFAULT;
-	if(loc() == 0)
+	if(loc == 0)
 		return 0;
 	string buf(ent_size, '\0');
-	if(status() == end)
+	if(status == end)
 		memset(&buf[0], EOD, ent_size);
 	else {
 		touch(false, true, false);
-		buf[0] = static_cast<char>((status() == delwdata || status() == delnodata) ? deleted_size : strlen(name()));
-		flags().write(&buf[1]);
-		memcpy(&buf[2], name(), name_size);
-		memcpy(&buf[0x2C], byte_order<4>::litend(static_cast<byte_order<4>::value_type>(cluster())).data(), 4);
-		memcpy(&buf[0x30], byte_order<4>::litend(static_cast<byte_order<4>::value_type>(size())).data(), 4);
-		creation().write(reinterpret_cast<unsigned char*>(&buf[0x34]));
-		access().write(reinterpret_cast<unsigned char*>(&buf[0x38]));
-		update().write(reinterpret_cast<unsigned char*>(&buf[0x3C]));
+		buf[0] = static_cast<char>((status == delwdata || status == delnodata) ? deleted_size : strlen(name));
+		flags.write(&buf[1]);
+		memcpy(&buf[2], name, name_size);
+		memcpy(&buf[0x2C], byte_order<4>::litend(static_cast<byte_order<4>::value_type>(cluster)).data(), 4);
+		memcpy(&buf[0x30], byte_order<4>::litend(static_cast<byte_order<4>::value_type>(size)).data(), 4);
+		creation.write(reinterpret_cast<unsigned char*>(&buf[0x34]));
+		access.write(reinterpret_cast<unsigned char*>(&buf[0x38]));
+		update.write(reinterpret_cast<unsigned char*>(&buf[0x3C]));
 	}
-	int res = fatx_context::get()->dev.write(loc(), buf);
+	int res = fatx_context::get()->dev.write(loc, buf);
 	return res;
 }
 int							entry::			save() {
-	if(parent() == this)
+	if(parent == this)
 		return 0;
-	assert(parent() != nullptr);
-	parent()->mux_D.lock();
-	// mux_E.lock();
+	assert(parent != nullptr);
+	parent->mux_D.lock();
 	int res = write();
-	// mux_E.unlock();
-	parent()->mux_D.unlock();
+	parent->mux_D.unlock();
 	return res;
 }
 int							entry::			rename(const char* n) {
-	if(status() != valid)
+	if(status != valid)
 		return EFAULT;
-	string nstr = string(n);
-	if(nstr.empty() || flags().lab)
+	string nam;
+	string dir;
+	if(string(n).rfind(sepdir, string(n).size()) != string::npos) {
+		nam = string(n).substr(string(n).rfind(sepdir, string(n).size()) + 1).data();
+		dir = string(n).substr(0, string(n).rfind(sepdir, string(n).size())).data();
+	}
+	else
+		nam = n;
+	entry* dst = fatx_context::get()->root->find(n);
+	if(!fatx_context::get()->mmi.cutname && nam.size() > name_size)
+		return -ENAMETOOLONG;
+	if(string(n).empty() || flags.lab || dst == this)
 		return 0;
-	if(nstr.rfind(sepdir, nstr.size()) != string::npos) {
-		assert(parent() != nullptr);
-		entry* newpar = fatx_context::get()->root->find(nstr.substr(0, nstr.rfind(sepdir, nstr.size())).data());
-		entry* oldpar = parent();
-		if(newpar == nullptr)
+	if(flags.dir && dst != nullptr)
+		return ENOTEMPTY;
+	if(dst != nullptr)
+		dst->parent->remfrdir(dst, true);
+	mux_E.lock();
+	if(dir.size() != 0) {
+		assert(parent != nullptr);
+		entry* newpar = fatx_context::get()->root->find(dir.data());
+		entry* oldpar = parent;
+		if(newpar == nullptr) {
+			mux_E.unlock();
 			return ENOENT;
+		}
 		if(oldpar != newpar) {
+			// move
 			oldpar->mux_D.lock();
-			status(delwdata);
+			status = delwdata;
 			oldpar->mux_E.lock_shared();
-			auto i = find_if(oldpar->childs.begin(), oldpar->childs.end(), [this] (entry& a) -> bool { return &a == this; });
+			auto i = find_if(oldpar->childs.begin(), oldpar->childs.end(), [this] (const entry& a) -> bool { return &a == this; });
 			assert(i != oldpar->childs.end());
 			oldpar->mux_E.unlock_shared();
-			write();
 			oldpar->mux_E.lock();
 			auto me = oldpar->childs.release(i);
 			oldpar->mux_E.unlock();
-			status(valid);
+			int res = 0;
+			if((res = write())) {
+				oldpar->mux_D.unlock();
+				mux_E.unlock();
+				return res;
+			}
 			oldpar->touch(false, false, true);
 			oldpar->mux_D.unlock();
-			int res = 0;
-			if((res = oldpar->save()))
+			if((res = oldpar->save())) {
+				mux_E.unlock();
 				return res;
+			}
+			status = valid;
 			if((res = newpar->addtodir(me.get()))) {
 				me.release();
+				mux_E.unlock();
 				return res;
 			}
 			me.release();
 		}
-		nstr.erase(0, nstr.rfind(sepdir, nstr.size()) + 1);
 	}
-	if(!fatx_context::get()->mmi.cutname && nstr.size() > name_size)
-		return -ENAMETOOLONG;
-	name(string(name_size + 1, '\0').data());
-	name(nstr.data());
-	namesize(static_cast<uint8_t>((status() == valid) ? ((nstr.size() <= name_size) ? nstr.size() : name_size) : namesize()));
-	return save();
+	memset(name, '\0', name_size + 1);
+	strncpy(name, nam.c_str(), name_size);
+	namesize = static_cast<uint8_t>((status == valid) ? ((nam.size() <= name_size) ? nam.size() : name_size) : namesize);
+	touch(false, false, true);
+	auto res = save();
+	mux_E.unlock();
+	return res;
 }
 void						entry::			recover() {
 	if(fatx_context::get()->mmi.local) {
-		if(!flags().dir) {
+		if(!flags.dir) {
 			ifstream fr;
 			filesystem::create_directories(filesystem::path("./" + path()).remove_filename());
 			fr.open("./" + path());
@@ -2849,38 +2906,38 @@ void						entry::			recover() {
 			}
 			else {
 				ofstream f("./" + path(), ios::binary | ios::trunc);
-				string s(size(), '\0');
-				data(&s[0], true, 0, size());
+				string s(size, '\0');
+				data(&s[0], true, 0, size);
 				f << s;
 				f.close();
 			}
 		}
 	}
 	else {
-		entry* e = parent()->find(name());
-		if(e != nullptr && e->status() == entry::valid) {
+		const entry* e = parent->find(name);
+		if(e != nullptr && e->status == entry::valid) {
 			console::write("Can't restore file. Another valid file with same name exists in this directory.\n", true);
 		}
 		else {
-			string buf = fatx_context::get()->dev.read(clsarithm::cls2ptr(clsarithm::ptr2cls(loc())), fatx_context::get()->par.clus_size);
+			string buf = fatx_context::get()->dev.read(clsarithm::cls2ptr(clsarithm::ptr2cls(loc)), fatx_context::get()->par.clus_size);
 			streamptr mark = 0;
 			for(size_t i = 0; i < buf.size(); i+= ent_size) {
 				if(buf[i] == EOD) {
-					mark = clsarithm::cls2ptr(clsarithm::ptr2cls(loc())) + i;
+					mark = clsarithm::cls2ptr(clsarithm::ptr2cls(loc)) + i;
 					break;
 				}
 			}
-			if(mark != 0 && loc() > mark) {
+			if(mark != 0 && loc > mark) {
 				entry no("_none", 0);
-				no.loc(mark);
-				no.status(delwdata);
+				no.loc = mark;
+				no.status = delwdata;
 				no.write();
-				for(size_t i = mark + ent_size; i < clsarithm::cls2ptr(clsarithm::ptr2cls(loc())) + fatx_context::get()->par.clus_size; i+= ent_size)
+				for(size_t i = mark + ent_size; i < clsarithm::cls2ptr(clsarithm::ptr2cls(loc)) + fatx_context::get()->par.clus_size; i+= ent_size)
 					fatx_context::get()->dev.write(i, string(1, static_cast<char>(deleted_size)));
 			}
-			status(entry::valid);
+			status = entry::valid;
 			write();
-			fatx_context::get()->fat->getareas(cluster(), [](clusptr c, clusptr v) -> void {
+			fatx_context::get()->fat->getareas(cluster, [](clusptr c, clusptr v) -> void {
 				fatx_context::get()->fat->write(c, v);
 				dynamic_cast<memmap*>(fatx_context::get()->fat)->memchain.find(c)->second.status = memmap::modified;
 			});
@@ -2888,25 +2945,25 @@ void						entry::			recover() {
 	}
 }
 void						entry::			guess() {
-	clusptr	p = cluster();
+	clusptr	p = cluster;
 	clusptr s = 0;
 	set<entry*> old;
 	#if !defined NDEBUG && defined DBG_GUESS
-		dbglog((format("GUESS: %s 0x%08X (%d)\n") % path() % cluster() % clsarithm::siz2cls(size())).str());
+		dbglog((format("GUESS: %s 0x%08X (%d)") % path() % cluster % clsarithm::siz2cls(size())).str());
 	#endif
 	for(
-		clusptr q = cluster(), nb = flags().dir ? 1 : clsarithm::siz2cls(size());
+		clusptr q = cluster, nb = flags.dir ? 1 : clsarithm::siz2cls(size);
 		nb > 0;
 		q = clsarithm::inccls(q)
 	) {
 		// is it free ?
 		if(fatx_context::get()->fat->read(q) != FLK) {
 			// check if first cluster is not available
-			if(q == cluster()) {
+			if(q == cluster) {
 				// if it is the case, give up, it's unrecoverable
-				status(delnodata);
+				status = delnodata;
 				if(fatx_context::get()->mmi.verbose)
-					console::write(path() + (flags().dir ? sepdir : (format(" (%d)") % size()).str()) + " not recoverable\n");
+					console::write(path() + (flags.dir ? sepdir : (format(" (%d)") % size).str()) + " not recoverable\n");
 				return;
 			}
 			// check if it's a previous guess, if it is the case, use it
@@ -2914,9 +2971,9 @@ void						entry::			guess() {
 				// check if cluster is occupied by a file deleted older than ours
 				if(
 					fatx_context::get()->fat->status(q) == memmap::deleted &&
-					!fatx_context::get()->fat->getentry(q)->flags().dir &&
+					!fatx_context::get()->fat->getentry(q)->flags.dir &&
 					fatx_context::get()->mmi.deldate &&
-					fatx_context::get()->fat->getentry(q)->update().seq() < update().seq()
+					fatx_context::get()->fat->getentry(q)->update.seq() < update.seq()
 				) {
 					// we remember it and use that cluster
 					old.insert(fatx_context::get()->fat->getentry(q));
@@ -2954,7 +3011,7 @@ void						entry::			guess() {
 		// q is free
 		if(s != 0) {
 			#if !defined NDEBUG && defined DBG_GUESS
-				dbglog((format(" skip: 0x%08X-0x%08X [belongs to %s [%c]]\n")
+				dbglog((format(" skip: 0x%08X-0x%08X [belongs to %s [%c]]")
 					% s % (q - 1)
 					% (fatx_context::get()->fat->getentry(s) == nullptr ? "lost chain" : fatx_context::get()->fat->getentry(s)->path())
 					% (fatx_context::get()->fat->status(s) == memmap::deleted ? 'D' : 'X')
@@ -2968,11 +3025,11 @@ void						entry::			guess() {
 	}
 	fatx_context::get()->fat->change(p, this, EOC, memmap::deleted);
 	#ifndef NDEBUG
-	dbglog((format("%s  Guessed clusters: %06d out of %06d for size %d (%s)\n")
-		% ((clsarithm::siz2cls(size()) != 0 && fatx_context::get()->fat->getareas(cluster()).nbcls() != clsarithm::siz2cls(size())) ? "!!!" : "   ")
-		% fatx_context::get()->fat->getareas(cluster()).nbcls()
-		% (flags().dir ? 1 : clsarithm::siz2cls(size()))
-		% size()
+	dbglog((format("%s  Guessed clusters: %06d out of %06d for size %d (%s)")
+		% ((clsarithm::siz2cls(size) != 0 && fatx_context::get()->fat->getareas(cluster).nbcls() != clsarithm::siz2cls(size)) ? "!!!" : "   ")
+		% fatx_context::get()->fat->getareas(cluster).nbcls()
+		% (flags.dir ? 1 : clsarithm::siz2cls(size))
+		% size
 		% path()
 	).str());
 	#endif
@@ -2982,50 +3039,50 @@ void						entry::			guess() {
 }
 bool						entry::			analyse(pass_t step, const string &header) {
 	bool recovered	= false;
-	if(step != findfile && flags().dir && status() == delnodata) {
-		console::write((format("Entry %s points to invalid data. Skipping.\n") % (header + name())).str(), fatx_context::get()->mmi.dialog);
+	if(step != findfile && flags.dir && status == delnodata) {
+		console::write((format("Entry %s points to invalid data. Skipping.\n") % (header + name)).str(), fatx_context::get()->mmi.dialog);
 		return false;
 	}
-	if(step == findfile && (status() == valid || status() == duplicate)) {
+	if(step == findfile && (status == valid || status == duplicate)) {
 		// sanity checks
-		if(flags().dir && cluster() == FLK) {
-			console::write((format("Entry %s has invalid cluster pointer.") % (header + name())).str(), fatx_context::get()->mmi.dialog);
+		if(flags.dir && cluster == FLK) {
+			console::write((format("Entry %s has invalid cluster pointer.") % (header + name)).str(), fatx_context::get()->mmi.dialog);
 			if(fatx_context::get()->mmi.prog == frontend::fsck) {
 				console::write(" Remove it ?", fatx_context::get()->mmi.dialog);
 				if(fatx_context::get()->mmi.getanswer(true)) {
-					assert(parent() != nullptr);
-					parent()->remfrdir(this, false);
+					assert(parent != nullptr);
+					parent->remfrdir(this, false);
 				}
 			}
 			else {
 				console::write("\n", fatx_context::get()->mmi.dialog);
-				status(delnodata);
+				status = delnodata;
 			}
 			return false;
 		}
 		bool dl = fatx_context::get()->mmi.dellost;
 		fatx_context::get()->mmi.dellost = true;
-		clusptr cnt	= fatx_context::get()->fat->getareas(cluster()).nbcls();
+		clusptr cnt	= fatx_context::get()->fat->getareas(cluster).nbcls();
 		fatx_context::get()->mmi.dellost = dl;
-		if(!flags().dir && cnt != clsarithm::siz2cls(size())) {
+		if(!flags.dir && cnt != clsarithm::siz2cls(size)) {
 			console::write((format("%sntry %s has wrong size: declared %d, found %d.")
-				% (status() == duplicate ? "Duplicate e" : "E")
+				% (status == duplicate ? "Duplicate e" : "E")
 				% path()
-				% size()
+				% size
 				% (cnt * fatx_context::get()->par.clus_size)
 			).str(), fatx_context::get()->mmi.dialog);
 			if(fatx_context::get()->mmi.prog == frontend::fsck) {
-				if(status() == duplicate) {
+				if(status == duplicate) {
 					console::write(" Remove it ?", fatx_context::get()->mmi.dialog);
 					if(fatx_context::get()->mmi.getanswer(true)) {
-						assert(parent() != nullptr);
-						parent()->remfrdir(this, false);
+						assert(parent != nullptr);
+						parent->remfrdir(this, false);
 						return false;
 					}
 				}
-				console::write((format(" Possible %s data, correct it ?") % ((cnt > clsarithm::siz2cls(size())) ? "extra" : "loss of")).str(), fatx_context::get()->mmi.dialog);
+				console::write((format(" Possible %s data, correct it ?") % ((cnt > clsarithm::siz2cls(size)) ? "extra" : "loss of")).str(), fatx_context::get()->mmi.dialog);
 				if(fatx_context::get()->mmi.getanswer(true)) {
-					size(cnt * fatx_context::get()->par.clus_size);
+					size = cnt * fatx_context::get()->par.clus_size;
 					write();
 				}
 			}
@@ -3033,62 +3090,62 @@ bool						entry::			analyse(pass_t step, const string &header) {
 				console::write("\n", fatx_context::get()->mmi.dialog);
 		}
 		entry* s = nullptr;
-		fatx_context::get()->fat->getareas(cluster(), [&s] (clusptr c, clusptr) -> void {
+		fatx_context::get()->fat->getareas(cluster, [&s] (clusptr c, clusptr) -> void {
 			if(s == nullptr)
 				s = fatx_context::get()->fat->getentry(c);
 		});
 		if(s != nullptr) {
 			console::write((format("Conflict between %sentry %s and %sentry %s (shares same blocks).")
-				% (status() == duplicate ? "duplicate " : "")
-				% (header + name())
-				% (s->status() == duplicate || s->status() == validupl ? "duplicate " : "")
+				% (status == duplicate ? "duplicate " : "")
+				% (header + name)
+				% (s->status == duplicate || s->status == validupl ? "duplicate " : "")
 				% (s->path().data())
 			).str(), fatx_context::get()->mmi.dialog);
 			if(fatx_context::get()->mmi.prog == frontend::fsck) {
 				console::write((format(" Remove %s (part of the other one) ?") % path().data()).str(), fatx_context::get()->mmi.dialog);
 				if(fatx_context::get()->mmi.getanswer(true)) {
-					if(cluster() != s->cluster()) {
-						assert(parent() != nullptr);
-						cluster(FLK);
-						parent()->remfrdir(this, false);
+					if(cluster != s->cluster) {
+						assert(parent != nullptr);
+						cluster = FLK;
+						parent->remfrdir(this, false);
 					}
 					else {
-						status(delnodata);
-						cluster(FLK);
+						status = delnodata;
+						cluster = FLK;
 						write();
 					}
 				}
 			}
 			else {
 				console::write("\n", fatx_context::get()->mmi.dialog);
-				status(delnodata);
+				status = delnodata;
 			}
 			return false;
 		}
-		if(status() == duplicate) {
-			auto e = find_if(parent()->childs.begin(), parent()->childs.end(), [this] (entry& i) -> bool { return namesize() == i.namesize() && strncmp(name(), i.name(), namesize()) == 0; });
-			if(e == parent()->childs.end() || (e->status() != duplicate && e->status() != validupl))
-				status(valid);		// problem already solved
-			else if(e->status() == duplicate)
-				status(validupl);	// waiting for analysis of the other entry
+		if(status == duplicate) {
+			auto e = find_if(parent->childs.begin(), parent->childs.end(), [this] (const entry& i) -> bool { return namesize == i.namesize && strncmp(name, i.name, namesize) == 0; });
+			if(e == parent->childs.end() || (e->status != duplicate && e->status != validupl))
+				status = valid;		// problem already solved
+			else if(e->status == duplicate)
+				status = validupl;	// waiting for analysis of the other entry
 			else {
 				// both entries are valid and different
-				console::write((format("Duplicate entry %s.") % (header + name())).str(), fatx_context::get()->mmi.dialog);
+				console::write((format("Duplicate entry %s.") % (header + name)).str(), fatx_context::get()->mmi.dialog);
 				if(fatx_context::get()->mmi.prog == frontend::unrm) {
 					// consider it if different from its brother
-					string t(name());
+					string t(name);
 					t += "~";
-					name(t.data());
-					namesize(max<uint8_t>(static_cast<uint8_t>(namesize() + 1), name_size));
-					console::write((format(" Reading it as %s.\n") % name()).str(), fatx_context::get()->mmi.dialog);
+					strncpy(name, t.c_str(), t.size());
+					namesize = max<uint8_t>(static_cast<uint8_t>(namesize + 1), name_size);
+					console::write((format(" Reading it as %s.\n") % name).str(), fatx_context::get()->mmi.dialog);
 				}
 				else if(fatx_context::get()->mmi.prog == frontend::fsck) {
 					// interactive way
-					string t(name());
+					string t(name);
 					t += "~";
-					name(t.data());
-					namesize(max<uint8_t>(static_cast<uint8_t>(namesize() + 1), name_size));
-					console::write((format(" Create it (as %s) ?") % name()).str(), fatx_context::get()->mmi.dialog);
+					strncpy(name, t.c_str(), t.size());
+					namesize = max<uint8_t>(static_cast<uint8_t>(namesize + 1), name_size);
+					console::write((format(" Create it (as %s) ?") % name).str(), fatx_context::get()->mmi.dialog);
 					if(fatx_context::get()->mmi.getanswer(true))
 						write();
 					else {
@@ -3105,106 +3162,98 @@ bool						entry::			analyse(pass_t step, const string &header) {
 		}
 		// we mark valid entries
 		if(fatx_context::get()->mmi.verbose)
-			console::write(header + name() + (flags().dir ? sepdir : (format(" (%d)") % size()).str()) + "\n");
+			console::write(header + name + (flags.dir ? sepdir : (format(" (%d)") % size).str()) + "\n");
 		fatx_context::get()->mmi.dellost = true;
-		areas(make_shared<vareas>(
-			fatx_context::get()->fat->getareas(cluster(), [this](clusptr c, clusptr) -> void {
+		areas = make_shared<vareas>(
+			fatx_context::get()->fat->getareas(cluster, [this](clusptr c, clusptr) -> void {
 				fatx_context::get()->fat->change(c, this);
-			})));
+			}));
 		fatx_context::get()->mmi.dellost = dl;
 	}
-	if(step == finddel && (status() == delwdata || status() == delnodata)) {
+	if(step == finddel && (status == delwdata || status == delnodata)) {
 		if(fatx_context::get()->mmi.verbose) {
-			console::write(header + name() + (flags().dir ? sepdir : (format(" (%d)") % size()).str())
-				+ " " + (status() == delwdata ? "deleted" : "not recoverable") + "\n"
+			console::write(header + name + (flags.dir ? sepdir : (format(" (%d)") % size).str())
+				+ " " + (status == delwdata ? "deleted" : "not recoverable") + "\n"
 			);
 		}
 		// we guess recoverable entries
-		if(status() == delwdata)
+		if(status == delwdata)
 			guess();
 	}
-	if(step == tryrecov && status() == delwdata && !flags().dir) {
+	if(step == tryrecov && status == delwdata && !flags.dir) {
 		// we recover file sub-entries
-		console::write(header + name() + (format(" (%d)") % size()).str() + " recover ?");
+		console::write(header + name + (format(" (%d)") % size).str() + " recover ?");
 		if(fatx_context::get()->mmi.getanswer()) {
 			recovered = true;
 			recover();
 		}
 	}
-	if(flags().dir) {
+	if(flags.dir) {
 		for(entry& ent: childs) {
 			// we go one step deeper
-			recovered = ent.analyse(step, header + name() + sepdir) || recovered;
+			recovered = ent.analyse(step, header + name + sepdir) || recovered;
 		}
 	}
-	if(recovered && flags().dir && status() != valid && !fatx_context::get()->mmi.local) {
-		console::write((format("Recovering parent directory %s.\n") % (header + name())).str(), fatx_context::get()->mmi.dialog);
+	if(recovered && flags.dir && status != valid && !fatx_context::get()->mmi.local) {
+		console::write((format("Recovering parent directory %s.\n") % (header + name)).str(), fatx_context::get()->mmi.dialog);
 		recover();
 	}
 	return recovered;
 }
 int							entry::			resize(const filesize s) {
 	#ifndef NDEBUG
-		dbglog((format("RESIZE: %s size:%d->%d\n") % path() % size() % s).str());
+		dbglog((format("RESIZE: %s size:%d->%d") % path() % size % s).str());
 	#endif
-	if(flags().dir)
+	if(flags.dir)
 		return EISDIR;
-	if(!writeopened()) {
-		#ifndef NDEBUG
-			dbglog((format("**> writing a file not opened for write (%s)\n") % path()).str());
-		#endif
-		return EACCES;
-	}
-	if(s == size())
+	if(s == size)
 		return 0;
 	if(s == 0) {
-		areas(nullptr);
-		fatx_context::get()->fat->freefat(cluster());
-		cluster(0);
-		size(s);
+		areas = nullptr;
+		fatx_context::get()->fat->freefat(cluster);
+		cluster = 0;
+		size = s;
 	}
-	else if(size() == 0) {
+	else if(size == 0) {
 		vareas v = fatx_context::get()->fat->alloc(clsarithm::siz2cls(s));
 		if(v.empty())
 			return ENOSPC;
-		cluster(v.first());
-		size(s);
-		areas(make_shared<vareas>(v.sub(size())));
+		cluster = v.first();
+		size = s;
+		areas = make_shared<vareas>(v.sub(size));
 	}
-	if(s != size()) {
+	if(s != size) {
 		int res = 0;
-		if((res = fatx_context::get()->fat->resize(areas(), clsarithm::siz2cls(s))))
+		if((res = fatx_context::get()->fat->resize(areas, clsarithm::siz2cls(s))))
 			return res;
-		size(s);
-		areas(make_shared<vareas>(areas()->sub(size())));
+		size = s;
+		areas = make_shared<vareas>(areas->sub(size));
 	}
 	return save();
 }
 int							entry::			data(char* buf, bool r, filesize offset, filesize s) {
-	s = (s == 0) ? (r ? size() - offset : size()) : (r ? min<filesize>(s, size() - offset) : s);
+	s = (s == 0) ? (r ? size - offset : size) : (r ? min<filesize>(s, size - offset) : s);
 	#ifndef NDEBUG
-		dbglog((format("DATA: %s(%d) [%c:0x%08X(%d)]\n") % path() % size() % (r ? 'R' : 'W') % offset % s).str());
+		dbglog((format("DATA: %s(%d) [%c:0x%08X(%d)]") % path() % size % (r ? 'R' : 'W') % offset % s).str());
 	#endif
-	if(flags().dir)
+	if(flags.dir)
 		return EISDIR;
-	if(!r && !writeopened())
-		return EACCES;
 	int res = 0;
-	if(!r && (size() == 0 || (offset + s) > size())) {
+	if(!r && (size == 0 || (offset + s) > size)) {
 		if((res = resize(offset + s))) {
 			#ifndef NDEBUG
-				dbglog((format("DATA:%s resize failed.\n") % path()).str());
+				dbglog((format("DATA:%s resize failed.") % path()).str());
 			#endif
 			return res;
 		}
 	}
-	if(size() != 0) {
-		if(!areas() || areas()->empty()) {
-			areas(make_shared<vareas>(fatx_context::get()->fat->getareas(cluster()).sub(size())));
-			if(areas()->empty())
+	if(size != 0) {
+		if(!areas || areas->empty()) {
+			areas = make_shared<vareas>(fatx_context::get()->fat->getareas(cluster).sub(size));
+			if(areas->empty())
 				return EFAULT;
 		}
-		for(const area& i: areas()->sub(s, offset)) {
+		for(const area& i: areas->sub(s, offset)) {
 			if(r)
 				memcpy(buf + i.offset - offset, fatx_context::get()->dev.read(i.pointer, i.size).data(), i.size);
 			else {
@@ -3220,9 +3269,12 @@ int							entry::			data(char* buf, bool r, filesize offset, filesize s) {
 	return res;
 }
 size_t						entry::			bufread(char* buf, filesize offset, filesize s) {
-	s = min<filesize>(size(), offset + s) - offset;
-	if(offset >= size() || s == 0)
+	mux_E.lock();
+	s = min<filesize>(size, offset + s) - offset;
+	if(offset >= size || s == 0) {
+		mux_E.unlock();
 		return 0;
+	}
 	mux_B.lock();
 	if(entbuf && (offset < entbuf->offset || (offset + s) > (entbuf->offset + entbuf->size()))) {
 		if(flush(false)) {
@@ -3230,47 +3282,53 @@ size_t						entry::			bufread(char* buf, filesize offset, filesize s) {
 				dbglog((format("**> flush buffer failed (%s)") % path()).str());
 			#endif
 			mux_B.unlock();
+			mux_E.unlock();
 			return 0;
 		}
 		entbuf.reset();
 	}
 	if(!entbuf) {
-		entbuf.reset(new buffer(offset, size() - offset));
+		entbuf.reset(new buffer(offset, size - offset));
 		if(entbuf->size() == 0 || data(entbuf->data(), true, entbuf->offset, entbuf->size())) {
 			#ifndef NDEBUG
 				dbglog((format("**> alloc buffer or read operation failed (%s: 0x%08X %d)") % path() % offset % s).str());
 			#endif
 			mux_B.unlock();
+			mux_E.unlock();
 			return 0;
 		}
 		#ifndef NDEBUG
-			dbglog((format("--> new read buffer (%s at 0x%016X: %d)\n") % path() %  entbuf.get() % entbuf->size()).str());
+			dbglog((format("--> new read buffer (%s at 0x%016X: %d)") % path() %  entbuf.get() % entbuf->size()).str());
 		#endif
 	}
 	s = min<filesize>(s, entbuf->size());
 	memcpy(buf, &(*entbuf)[offset - entbuf->offset], s);
 	#ifndef NDEBUG
-		dbglog((format("--> read buffer (%s at 0x%016X(%d): %d(%d))\n") % path() %  entbuf.get() % entbuf->size() % (offset - entbuf->offset) % s).str());
+		dbglog((format("--> read buffer (%s at 0x%016X(%d): %d(%d))") % path() %  entbuf.get() % entbuf->size() % (offset - entbuf->offset) % s).str());
 	#endif
 	#if !defined NDEBUG && defined DBGBUFDMP
 		(*entbuf)(offset - entbuf->offset);
 	#endif
 	mux_B.unlock();
+	mux_E.unlock();
 	return s;
 }
 size_t						entry::			bufwrite(const char* buf, filesize offset, filesize s) {
-	if(!writeopened()) {
+	mux_E.lock();
+	if(!writeopened) {
 		#ifndef NDEBUG
 			dbglog((format("**> writing a file not opened for write (%s)") % path()).str());
 		#endif
+		mux_E.unlock();
 		return false;
 	}
 	mux_B.lock();
-	if(size() < offset + s && resize(offset + s)) {
+	if(size < offset + s && resize(offset + s)) {
 		#ifndef NDEBUG
 			dbglog((format("**> file resize failed (%s: 0x%08X %d)") % path() % offset % s).str());
 		#endif
 		mux_B.unlock();
+		mux_E.unlock();
 		return 0;
 	}
 	int res = 0;
@@ -3291,6 +3349,7 @@ size_t						entry::			bufwrite(const char* buf, filesize offset, filesize s) {
 				dbglog((format("**> flush buffer failed (%s)") % path()).str());
 			#endif
 			mux_B.unlock();
+			mux_E.unlock();
 			return 0;
 		}
 	}
@@ -3301,6 +3360,7 @@ size_t						entry::			bufwrite(const char* buf, filesize offset, filesize s) {
 				dbglog((format("**> alloc buffer failed (%s: 0x%08X %d)") % path() % offset % s).str());
 			#endif
 			mux_B.unlock();
+			mux_E.unlock();
 			return 0;
 		}
 	}
@@ -3308,237 +3368,174 @@ size_t						entry::			bufwrite(const char* buf, filesize offset, filesize s) {
 	memcpy(&(*entbuf)[offset - entbuf->offset], buf, s);
 	entbuf->touched = true;
 	#ifndef NDEBUG
-		dbglog((format("--> write buffer (%s at 0x%08X(%d): %d(%d))\n") % path() %  entbuf.get() % entbuf->size() % (offset - entbuf->offset) % s).str());
+		dbglog((format("--> write buffer (%s at 0x%08X(%d): %d(%d))") % path() %  entbuf.get() % entbuf->size() % (offset - entbuf->offset) % s).str());
 	#endif
 	#if !defined NDEBUG && defined DBGBUFDMP
 		(*entbuf)(offset - entbuf->offset);
 	#endif
 	mux_B.unlock();
+	mux_E.unlock();
 	return s;
 }
 int							entry::			flush(bool l) {
-	if(flags().dir)
+	if(flags.dir || !entbuf)
 		return 0;
 	int res = 0;
 	if(l)
 		mux_B.lock();
-	if(entbuf) {
-		#ifndef NDEBUG
-		if(entbuf->touched)
-			dbglog((format("<-> flush buffer (%s at 0x%016X: %d)\n") % path() % entbuf.get() % entbuf->size()).str());
-		else
-			dbglog((format("<-> no need to flush buffer (%s at 0x%016X: %d)\n") % path() % entbuf.get() % entbuf->size()).str());
-		#endif
-		if(entbuf->touched) {
-			if(writeopened()) {
-				res = data(entbuf.get()->data(), false, entbuf->offset, entbuf->size());
-				if(!res)
-					entbuf.reset();
-			}
-			else
-				res = EACCES;
+	#ifndef NDEBUG
+	if(entbuf->touched)
+		dbglog((format("<-> flush buffer (%s at 0x%016X: %d)") % path() % entbuf.get() % entbuf->size()).str());
+	else
+		dbglog((format("<-> no need to flush buffer (%s at 0x%016X: %d)") % path() % entbuf.get() % entbuf->size()).str());
+	#endif
+	if(entbuf->touched) {
+		if(writeopened) {
+			res = data(entbuf.get()->data(), false, entbuf->offset, entbuf->size());
+			if(!res)
+				entbuf.reset();
 		}
+		else
+			res = EACCES;
 	}
 	if(l)
 		mux_B.unlock();
 	return res;
 }
 void						entry::			open(bool w) {
-	if(!flags().dir) {
-		if(w)
-			mux_D.lock();
-		else
-			mux_D.lock_shared();
-		if(!writeopened())
-			writeopened(w);
-		if(cptacc() == 0 && cluster() != 0 && size() != 0)
-			areas(make_shared<vareas>(fatx_context::get()->fat->getareas(cluster()).sub(size())));
-		cptacc(cptacc() + 1);
+	if(flags.dir)
+		return;
+	mux_E.lock();
+	if(w) {
+		exclusive.acquire();
+		writeopened = true;
+		if(cluster != 0 && size != 0)
+			areas = make_shared<vareas>(fatx_context::get()->fat->getareas(cluster).sub(size));
 	}
+	else {
+		assert(!writeopened);
+		if(cptacc == 0)
+			exclusive.acquire();
+		if(cptacc == 0 && cluster != 0 && size != 0)
+			areas = make_shared<vareas>(fatx_context::get()->fat->getareas(cluster).sub(size));
+		cptacc++;
+	}
+	opened = true;
+	mux_E.unlock();
 }
 void						entry::			close(bool w) {
-	if(!flags().dir) {
-		if(writeopened()) {
-			flush(true);
-			writeopened(false);
-		}
-		cptacc(cptacc() - 1);
-		if(cptacc() == 0) {
-			areas(nullptr);
+	if(flags.dir)
+		return;
+	if(!opened) {
+		#ifndef NDEBUG
+			dbglog((format("**> closing a file not opened (%s)") % path()).str());
+		#endif
+		return;
+	}
+	mux_E.lock();
+	if(w) {
+		flush(true);
+		writeopened = false;
+		exclusive.release();
+	}
+	else {
+		assert(!writeopened);
+		cptacc--;
+		if(cptacc == 0) {
+			areas = nullptr;
 			if(entbuf) {
 				mux_B.lock();
 				entbuf.reset();
 				mux_B.unlock();
 			}
 		}
-		if(w)
-			mux_D.unlock();
-		else
-			mux_D.unlock_shared();
+		if(cptacc == 0)
+			exclusive.release();
 	}
-}
-bool						entry::			operator == (entry& b) {
-	bool res =
-		loc() == b.loc() &&
-		cluster() == b.cluster() &&
-		size() == b.size() &&
-		parent() == b.parent() &&
-		strncmp(name(), b.name(), namesize()) == 0
-	;
-	return res;
+	opened = false;
+	mux_E.unlock();
 }
 
-static int									fatx_getattr	(const char* path, struct stat* st) {
+static int									fatx_open		(const char* path, fuse_file_info* fi) {
 	#ifndef NDEBUG
-		dbglog((format("GETATTR: %s\n") % path).str());
+		dbglog((format("OPEN: %s [%c]") % path % (fi->flags & (S_IWUSR | S_IWGRP | S_IWOTH) ? 'w' : 'r' )).str());
 	#endif
 	entry* f = fatx_context::get()->root->find(path);
-	if(f == nullptr || f->status() == entry::invalid || (f->flags().dir && f->cluster() == 0))
-		return -ENOENT;
-	memset(st, 0, sizeof(struct stat));
-	st->st_dev		= fatx_context::get()->par.par_id;
-	st->st_mode		= f->flags()() & (fatx_context::get()->mmi.mask | S_IFDIR | S_IFREG);
-	st->st_nlink	= f->childs.size() + 1;
-	st->st_size		= static_cast<__off_t>(f->flags().dir ? f->childs.size() : f->size());
-	st->st_blksize	= fatx_context::get()->par.clus_size;
-	st->st_blocks	= static_cast<__blkcnt_t>(clsarithm::siz2cls(f->size()) * fatx_context::get()->par.clus_size / blksize);
-	st->st_atime	= f->access()();
-	st->st_mtime	= f->update()();
-	st->st_ctime	= f->creation()();
-	st->st_uid		= fatx_context::get()->mmi.uid;
-	st->st_gid		= fatx_context::get()->mmi.gid;
-	#ifndef NDEBUG
-		dbglog(f->print());
-	#endif
-	return 0;
-}
-static int									fatx_truncate	(const char* path, off_t size) {
-	#ifndef NDEBUG
-		dbglog((format("TRUNCATE: %s\n") % path).str());
-	#endif
-	entry* f = fatx_context::get()->root->find(path);
-	if(f == nullptr || f->status() == entry::invalid)
-		return -ENOENT;
-	if(!fatx_context::get()->mmi.writeable())
-		return -EROFS;
-	if(f->flags().ro)
-		return -EACCES;
-	return -f->resize(static_cast<filesize>(size));
-}
-static int									fatx_open		(const char* path, struct fuse_file_info* fi) {
-	#ifndef NDEBUG
-		dbglog((format("OPEN: %s [%c]\n") % path % (fi->flags & (S_IWUSR | S_IWGRP | S_IWOTH) ? 'w' : 'r' )).str());
-	#endif
-	entry* f = fatx_context::get()->root->find(path);
-	if(f == nullptr || f->status() == entry::invalid)
+	if(f == nullptr || f->status == entry::invalid)
 		return -ENOENT;
 	if((fi->flags & (O_WRONLY | O_RDWR)) != 0 && !fatx_context::get()->mmi.writeable())
 		return -EROFS;
-	if((fi->flags & (O_WRONLY | O_RDWR)) != 0 && f->flags().ro)
+	if((fi->flags & (O_WRONLY | O_RDWR)) != 0 && f->flags.ro)
 		return -EPERM;
 	f->open((fi->flags & (O_WRONLY | O_RDWR)) != 0);
 	fi->fh = uint64_t(f);
 	return 0;
 }
-static int									fatx_flush		(const char* path, struct fuse_file_info* fi) {
+static int									fatx_read		(const char* path, char* buf, size_t size, off_t offset, fuse_file_info* fi) {
 	#ifndef NDEBUG
-		dbglog((format("FLUSH: %s\n") % path).str());
+		dbglog((format("READ: %s (%d@%d)") % path % size % offset).str());
 	#endif
-	entry* f(reinterpret_cast<entry *>(fi->fh));
-	if(f == nullptr)
-		f = fatx_context::get()->root->find(path);
-	if(f == nullptr || f->status() == entry::invalid)
-		return -ENOENT;
-	return -f->flush();
-}
-static int									fatx_close		(const char* path, struct fuse_file_info* fi) {
-	#ifndef NDEBUG
-		dbglog((format("CLOSE: %s\n") % path).str());
-	#endif
-	entry* f(reinterpret_cast<entry *>(fi->fh));
-	if(f == nullptr)
-		f = fatx_context::get()->root->find(path);
-	if(f == nullptr || f->status() == entry::invalid)
-		return -ENOENT;
-	f->close((fi->flags & (O_WRONLY | O_RDWR)) != 0);
-	fi->fh = uint64_t(0);
-	return 0;
-}
-static int									fatx_read		(const char* path, char* buf, size_t size, off_t offset, struct fuse_file_info* fi) {
-	#ifndef NDEBUG
-		dbglog((format("READ: %s (%d@%d)\n") % path % size % offset).str());
-	#endif
-	entry* f(reinterpret_cast<entry *>(fi->fh));
-	if(f == nullptr)
-		f = fatx_context::get()->root->find(path);
-	if(f == nullptr || f->status() == entry::invalid)
+	entry* f = fatx_context::get()->root->find(path);
+	if(f == nullptr || f->status == entry::invalid || fi->fh != uint64_t(f))
 		return -ENOENT;
 	return static_cast<int>(f->bufread(buf, static_cast<filesize>(offset), size));
 }
-static int									fatx_write		(const char* path, const char* buf, size_t size, off_t offset, struct fuse_file_info* fi) {
+static int									fatx_write		(const char* path, const char* buf, size_t size, off_t offset, fuse_file_info* fi) {
 	#ifndef NDEBUG
-		dbglog((format("WRITE: %s (%d@%d)\n") % path % size % offset).str());
+		dbglog((format("WRITE: %s (%d@%d)") % path % size % offset).str());
 	#endif
-	entry* f(reinterpret_cast<entry*>(fi->fh));
-	if(f == nullptr)
-		f = fatx_context::get()->root->find(path);
-	if(f == nullptr || f->status() == entry::invalid)
+	entry* f = fatx_context::get()->root->find(path);
+	if(f == nullptr || f->status == entry::invalid || fi->fh != uint64_t(f))
 		return -ENOENT;
 	if(!fatx_context::get()->mmi.writeable())
 		return -EROFS;
-	if(f->flags().ro)
+	if(f->flags.ro)
 		return -EACCES;
 	return static_cast<int>(f->bufwrite(buf, static_cast<filesize>(offset), size));
 }
-static int									fatx_chmod		(const char* path, mode_t mode) {
+static int									fatx_flush		(const char* path, fuse_file_info* fi) {
 	#ifndef NDEBUG
-		dbglog((format("CHMOD: %s\n") % path).str());
+		dbglog((format("FLUSH: %s") % path).str());
 	#endif
 	entry* f = fatx_context::get()->root->find(path);
-	if(f == nullptr || f->status() == entry::invalid)
+	if(f == nullptr || f->status == entry::invalid || fi->fh != uint64_t(f))
 		return -ENOENT;
-	if(!fatx_context::get()->mmi.writeable())
-		return -EROFS;
-	f->flags()(mode);
-	return -f->save();
+	return -f->flush();
 }
-static int									fatx_chown		(const char* path, uid_t, gid_t) {
+static int									fatx_close		(const char* path, fuse_file_info* fi) {
 	#ifndef NDEBUG
-		dbglog((format("CHOWN: %s\n") % path).str());
+		dbglog((format("CLOSE: %s") % path).str());
 	#endif
 	entry* f = fatx_context::get()->root->find(path);
-	if(f == nullptr || f->status() == entry::invalid)
+	if(f == nullptr || f->status == entry::invalid || fi->fh != uint64_t(f))
 		return -ENOENT;
-	if(!fatx_context::get()->mmi.writeable())
-		return -EROFS;
-	// nothing done
+	f->close((fi->flags & (O_WRONLY | O_RDWR)) != 0);
+	fi->fh = 0;
 	return 0;
 }
-static int									fatx_readdir	(const char* path, void* buf, fuse_fill_dir_t ff, off_t, struct fuse_file_info* fi) {
+static int									fatx_readdir	(const char* path, void* buf, fuse_fill_dir_t ff, off_t, fuse_file_info*) {
 	#ifndef NDEBUG
-		dbglog((format("READDIR: %s\n") % path).str());
+		dbglog((format("READDIR: %s") % path).str());
 	#endif
-	entry* f(reinterpret_cast<entry*>(fi->fh));
-	if(f == nullptr)
-		f = fatx_context::get()->root->find(path);
-	if(f == nullptr || f->status() == entry::invalid)
+	entry* f = fatx_context::get()->root->find(path);
+	if(f == nullptr || f->status == entry::invalid)
 		return -ENOENT;
 	struct stat st;
 	int res;
 	if((res = fatx_getattr(f->path().data(), &st)) != 0)
 		return res;
 	ff(buf, ".", &st, 0);
-	if((res = fatx_getattr(f->parent()->path().data(), &st)) != 0)
+	if((res = fatx_getattr(f->parent->path().data(), &st)) != 0)
 		return res;
 	ff(buf, "..", &st, 0);
 	for(entry& i: f->childs) {
-		if(i.status() == entry::valid || (fatx_context::get()->mmi.recover && i.status() == entry::delwdata)) {
+		if(i.status == entry::valid || (fatx_context::get()->mmi.recover && i.status == entry::delwdata)) {
 			if((res = fatx_getattr(i.path().data(), &st)) != 0)
 				return res;
-			if(ff(buf, i.name(), &st, 0) != 0)
+			if(ff(buf, i.name, &st, 0) != 0)
 				return -EBADF;
 			#ifndef NDEBUG
-				dbglog((format(" %s\n") % i.path()).str());
+				dbglog((format(" %s") % i.path()).str());
 			#endif
 		}
 	}
@@ -3546,7 +3543,7 @@ static int									fatx_readdir	(const char* path, void* buf, fuse_fill_dir_t ff
 }
 static int									fatx_create		(const char* path, mode_t mode) {
 	#ifndef NDEBUG
-		dbglog((format("CREATE: %s\n") % path).str());
+		dbglog((format("CREATE: %s") % path).str());
 	#endif
 	if(!fatx_context::get()->mmi.writeable())
 		return -EACCES;
@@ -3557,31 +3554,38 @@ static int									fatx_create		(const char* path, mode_t mode) {
 	if(fatx_context::get()->mmi.cutname)
 		p.resize(l + 1 + name_size);
 	else {
-		if((p.length() - (l + 1)) > name_size)
+		if(p.length() > name_size + l + 1)
 			return -ENAMETOOLONG;
 	}
-	if(fatx_context::get()->root->find(path) != nullptr)
-		return -EEXIST;
+	if(fatx_context::get()->root->find(path) != nullptr) {
+		if((mode & S_IFREG) == 0)
+			return -EEXIST;
+		else
+			fatx_remove(path);
+	}
 	entry* n = new entry(p.substr(l + 1), 0, ((mode & S_IFREG) == 0));
-	if(n->flags().dir && n->cluster() == 0) {
+	if(n->flags.dir && n->cluster == 0) {
+		fatx_context::get()->fat->freefat(n->cluster);
 		delete n;
 		return -ENOSPC;
 	}
 	entry* s = fatx_context::get()->root->find(p.substr(0, l).data());
 	if(s == nullptr) {
+		fatx_context::get()->fat->freefat(n->cluster);
 		delete n;
 		return -ENOENT;
 	}
 	int res = 0;
 	if((res = s->addtodir(n))) {
+		fatx_context::get()->fat->freefat(n->cluster);
 		delete n;
 		return -res;
 	}
 	return fatx_chmod(path, mode);
 }
-static int									fatx_creope		(const char* path, mode_t mode, struct fuse_file_info* fi) {
+static int									fatx_creope		(const char* path, mode_t mode, fuse_file_info* fi) {
 	#ifndef NDEBUG
-		dbglog((format("CREOPE: %s\n") % path).str());
+		dbglog((format("CREOPE: %s") % path).str());
 	#endif
 	int res = 0;
 	if((res = fatx_create(path, mode)) != 0)
@@ -3590,57 +3594,129 @@ static int									fatx_creope		(const char* path, mode_t mode, struct fuse_file
 }
 static int									fatx_remove		(const char* path) {
 	#ifndef NDEBUG
-		dbglog((format("REMOVE: %s\n") % path).str());
+		dbglog((format("REMOVE: %s") % path).str());
 	#endif
 	entry* f = fatx_context::get()->root->find(path);
-	if(f == nullptr || f->status() == entry::invalid)
+	if(f == nullptr || f->status == entry::invalid)
 		return -ENOENT;
 	if(!fatx_context::get()->mmi.writeable())
 		return -EROFS;
-	if(f->flags().ro)
+	if(f->flags.ro)
 		return -EACCES;
 	if(f == fatx_context::get()->root)
 		return -EBUSY;
-	if(f->flags().dir && f->childs.size() != 0)
+	if(f->flags.dir && f->childs.size() != 0)
 		return -ENOTEMPTY;
-	assert(f->parent() != nullptr);
-	f->parent()->remfrdir(f);
+	assert(f->parent != nullptr);
+	f->parent->remfrdir(f, true);
 	return 0;
 }
 static int									fatx_rename		(const char* from, const char* to) {
 	#ifndef NDEBUG
-		dbglog((format("RENAME: %s to %s\n") % from % to).str());
+		dbglog((format("RENAME: %s to %s") % from % to).str());
 	#endif
 	entry* f = fatx_context::get()->root->find(from);
-	if(f == nullptr || f->status() == entry::invalid)
+	if(f == nullptr || f->status == entry::invalid)
 		return -ENOENT;
 	if(!fatx_context::get()->mmi.writeable())
 		return -EROFS;
-	if(f->flags().ro)
+	if(f->flags.ro)
 		return -EACCES;
 	return -f->rename(to);
 }
-static int									fatx_utimens	(const char* path, const struct timespec tv[2]) {
+static int									fatx_getattr	(const char* path, struct stat* st) {
 	#ifndef NDEBUG
-		dbglog((format("UTIMENS: %s\n") % path).str());
+		dbglog((format("GETATTR: %s") % path).str());
 	#endif
 	entry* f = fatx_context::get()->root->find(path);
-	if(f == nullptr || f->status() == entry::invalid)
+	if(f == nullptr || f->status == entry::invalid || (f->flags.dir && f->cluster == 0))
+		return -ENOENT;
+	memset(st, 0, sizeof(struct stat));
+	f->mux_E.lock_shared();
+	st->st_dev		= fatx_context::get()->par.par_id;
+	st->st_mode		= f->flags() & (fatx_context::get()->mmi.mask | S_IFDIR | S_IFREG);
+	st->st_nlink	= f->childs.size() + 1;
+	st->st_size		= static_cast<__off_t>(f->flags.dir ? f->childs.size() : f->size);
+	st->st_blksize	= fatx_context::get()->par.clus_size;
+	st->st_blocks	= static_cast<__blkcnt_t>(clsarithm::siz2cls(f->size) * fatx_context::get()->par.clus_size / blksize);
+	st->st_atime	= f->access();
+	st->st_mtime	= f->update();
+	st->st_ctime	= f->creation();
+	st->st_uid		= fatx_context::get()->mmi.uid;
+	st->st_gid		= fatx_context::get()->mmi.gid;
+	#ifndef NDEBUG
+		dbglog(f->print());
+	#endif
+	f->mux_E.unlock_shared();
+	return 0;
+}
+static int									fatx_chmod		(const char* path, mode_t mode) {
+	#ifndef NDEBUG
+		dbglog((format("CHMOD: %s") % path).str());
+	#endif
+	entry* f = fatx_context::get()->root->find(path);
+	if(f == nullptr || f->status == entry::invalid)
 		return -ENOENT;
 	if(!fatx_context::get()->mmi.writeable())
 		return -EROFS;
-	if(f->flags().ro)
+	f->mux_E.lock();
+	f->flags(mode);
+	auto res = -f->save();
+	f->mux_E.unlock();
+	return res;
+}
+static int									fatx_chown		(const char* path, uid_t, gid_t) {
+	#ifndef NDEBUG
+		dbglog((format("CHOWN: %s") % path).str());
+	#endif
+	const entry* f = fatx_context::get()->root->find(path);
+	if(f == nullptr || f->status == entry::invalid)
+		return -ENOENT;
+	if(!fatx_context::get()->mmi.writeable())
+		return -EROFS;
+	// nothing done
+	return 0;
+}
+static int									fatx_truncate	(const char* path, off_t size) {
+	#ifndef NDEBUG
+		dbglog((format("TRUNCATE: %s") % path).str());
+	#endif
+	entry* f = fatx_context::get()->root->find(path);
+	if(f == nullptr || f->status == entry::invalid)
+		return -ENOENT;
+	if(!fatx_context::get()->mmi.writeable())
+		return -EROFS;
+	if(f->flags.ro)
+		return -EACCES;
+	f->mux_E.lock();
+	auto res = -f->resize(static_cast<filesize>(size));
+	f->mux_E.unlock();
+	return res;
+}
+static int									fatx_utimens	(const char* path, const timespec tv[2]) {
+	#ifndef NDEBUG
+		dbglog((format("UTIMENS: %s") % path).str());
+	#endif
+	entry* f = fatx_context::get()->root->find(path);
+	if(f == nullptr || f->status == entry::invalid)
+		return -ENOENT;
+	if(!fatx_context::get()->mmi.writeable())
+		return -EROFS;
+	if(f->flags.ro)
 		return -EACCES;
 	date d;
 	d(tv[0].tv_sec);
-	f->access(d);
+	f->mux_E.lock();
+	f->access = d;
 	d(tv[1].tv_sec);
-	f->update(d);
-	return -f->save();
+	f->update = d;
+	auto res = -f->save();
+	f->mux_E.unlock();
+	return res;
 }
 static int									fatx_statfs		(const char* path, struct statvfs* sfs) {
 	#ifndef NDEBUG
-		dbglog((format("STATFS: %s\n") % path).str());
+		dbglog((format("STATFS: %s") % path).str());
 	#else
 		(void)path;
 	#endif
@@ -3653,7 +3729,7 @@ static int									fatx_statfs		(const char* path, struct statvfs* sfs) {
 	sfs->f_ffree	= 0;
 	sfs->f_favail	= 0;
 	sfs->f_fsid		= fatx_context::get()->par.par_id;
-	sfs->f_flag		= ST_NOSUID | (fatx_context::get()->mmi.writeable() ? 0 : ST_RDONLY);
+	sfs->f_flag	= ST_NOSUID | (fatx_context::get()->mmi.writeable() ? 0 : ST_RDONLY);
 	sfs->f_namemax	= name_size;
 	#ifndef NDEBUG
 		dbglog((format(
@@ -3684,16 +3760,16 @@ static int									fatx_statfs		(const char* path, struct statvfs* sfs) {
 	#endif
 	return 0;
 }
-static void*								fatx_init		(struct fuse_conn_info* fci) {
+static void*								fatx_init		(fuse_conn_info* fci) {
 	#ifndef NDEBUG
-		dbglog("INIT\n");
+		dbglog("INIT");
 	#endif
 	fci->want = FUSE_CAP_BIG_WRITES | FUSE_CAP_DONT_MASK;
 	return nullptr;
 }
 static void									fatx_destroy	(void*) {
 	#ifndef NDEBUG
-		dbglog("DESTROY\n");
+		dbglog("DESTROY");
 	#endif
 	fatx_context::get()->destroy();
 	delete fatx_context::get();
@@ -3820,7 +3896,7 @@ int											main(int argc, char* argv[]) {
 
 		err = fuse_main(fuse_argc, fuse_argv, &fatx_ops, nullptr);
 		#ifndef NDEBUG
-			dbglog((format("Fuse returned: %d\n") % err).str());
+			dbglog((format("Fuse returned: %d") % err).str());
 		#endif
 	}
 	bool answ = false;
@@ -3835,8 +3911,8 @@ int											main(int argc, char* argv[]) {
 			fatx_context::get()->dev.write(fatx_context::get()->par.root_start, string(fatx_context::get()->par.clus_size, '\0'));
 			console::write(".");
 			fatx_context::get()->root = new entry("", 0, true);
-			fatx_context::get()->root->parent(fatx_context::get()->root);
-			fatx_context::get()->root->status(entry::valid);
+			fatx_context::get()->root->parent = fatx_context::get()->root;
+			fatx_context::get()->root->status = entry::valid;
 			console::write("done.\n");
 			console::write((format("FATX filesystem created with %d clusters.\n") % fatx_context::get()->par.clus_fat).str());
 			if(mmi.volname.empty())
@@ -3848,15 +3924,13 @@ int											main(int argc, char* argv[]) {
 			fatx_context::get()->fat->gapcheck();
 		fatx_context::get()->par.par_label = fatx_context::get()->mmi.volname;
 		unsigned char lab[slab];
-		entry* idx = fatx_context::get()->root->find(fidx);
+		entry* idx = fatx_context::get()->root->find(flab);
 		filesize s = fatx_context::get()->par.label(lab);
 		if(idx == nullptr) {
-			fatx_context::get()->root->addtodir(new entry(fidx, 0, false));
-			idx = fatx_context::get()->root->find(fidx);
+			fatx_context::get()->root->addtodir(new entry(flab, 0, false));
+			idx = fatx_context::get()->root->find(flab);
 			assert(idx != nullptr);
-			attrib fl = idx->flags();
-			fl.lab = true;
-			idx->flags(fl);
+			idx->flags.lab = true;
 			idx->save();
 		}
 		if(!idx->resize(s) && !idx->data(reinterpret_cast<char*>(lab), false, 0, s))
@@ -3893,7 +3967,7 @@ int											main(int argc, char* argv[]) {
 		err = mmi.prog != frontend::fsck ? code_noerr : !fatx_context::get()->dev.modified() ? code_noerr : fatx_context::get()->mmi.allyes ? code_corrd : code_ncorr;
 	delete fatx_context::get();
 	#ifndef NDEBUG
-		dbglog((format("<= ENDC: %s\n") % mmi.name()).str());
+		dbglog((format("<= ENDC: %s") % mmi.name()).str());
 	#endif
 	return err;
 }

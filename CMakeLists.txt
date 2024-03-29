@@ -96,12 +96,17 @@ add_compile_options(
   -Wno-inline)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_options(
-	# -DDBG_INIT
-	# -DDBG_READ -DDBG_WRITE -DDBG_DIFF -DDBG_SEM -DDBGSEM=\"Data:/fatx\"
-	# -DDBG_BUFFER -DDBGBUFDMP=256 -DDBG_CACHE -DDBG_CACHDMP -DDBG_AREAS
-	# -DDBG_GUESS -DDBGCR=32 -DDBGLIMIT=256 -DDBG_FAT -DDBG_GAPS
-	# -DNO_WRITE
-	# -DNO_LOCK -DNO_CACHE
+	-DDBG_INIT
+	-DDBG_READ -DDBG_WRITE
+	# -DDBG_DIFF
+	# -DDBG_SEM
+	# -DDBGSEM=\"Entry:fatx\"
+	# -DDBG_BUFFER -DDBGBUFDMP=64 -DDBG_CACHE -DDBG_CACHDMP -DDBG_AREAS
+	# -DDBG_GUESS
+	-DDBGCR=32
+	-DDBGLIMIT=256
+	# -DDBG_FAT
+	# -DDBG_GAPS -DNO_WRITE -DNO_LOCK -DNO_CACHE
 )
 if(SANITIZE)
 	add_compile_options(
@@ -196,13 +201,13 @@ install(DIRECTORY man8 TYPE MAN)
 install(
   FILES README
   COPYING
-	TODO
-	AUTHORS
-	BUGS
-	NEWS
-	INSTALL
-	ChangeLog
-	doc/fatx.jpg
+  TODO
+  AUTHORS
+  BUGS
+  NEWS
+		INSTALL
+		ChangeLog
+		doc/fatx.jpg
   TYPE DOC)
 
 set(DOXYGEN_PROJECT_LOGO doc/fatx.jpg)
@@ -214,7 +219,8 @@ endif(DOXYGEN_FOUND)
 enable_testing()
 set(CTEST_OUTPUT_ON_FAILURE 1)
 find_program(BASH NAMES bash)
-execute_process(COMMAND ${BASH} ${PROJECT_SOURCE_DIR}/test.sh OUTPUT_VARIABLE names)
+execute_process(COMMAND ${BASH} ${PROJECT_SOURCE_DIR}/test.sh
+	OUTPUT_VARIABLE names)
 list(LENGTH names nbtst)
 math(EXPR nb "${nbtst} - 1")
 foreach(i RANGE 0 ${nb})

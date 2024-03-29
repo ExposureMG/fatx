@@ -1,3 +1,12 @@
+fatx (1.18) unstable; urgency=low
+  Corrected bad FAT allocations in case of file creation failed
+  Corrected adding entry failed if entry exists in bad state
+  Corrected bad overwriting of file
+  Moved to stdlib shared_mutex
+  Moved to last version of libfuse API
+
+ -- Christophe Duverger <fatx@christopheduverger.fr> Fri, 29 March 2024 18:52:02 +0100
+
 fatx (1.17) unstable; urgency=low
   USB drive correctly handled
   False detection of files corrected
@@ -143,3 +152,4 @@ fatx (1.0) unstable; urgency=low
   Initial release
 
  -- Christophe Duverger <baxter@about.org>  Fri, 05 Apr 2013 19:22:39 +0200
+

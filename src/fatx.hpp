@@ -31,7 +31,7 @@
  *	-D DBGBUFDMP=x	to print x bytes of buffer at each change
  *	-D DBG_CACHE	to print cache operations
  *	-D DBG_CACHDMP	to dump cache at each change
- *	-D DBG_AREAS	to print fat areas
+ *	-D DBG_AREAS	to print fat areas()
  *	-D DBG_GUESS	to print guesses
  *	-D DBGCR=x		to limit to x bytes per line
  *	-D DBGLIMIT=x	to limit to x bytes the printing of read/write
@@ -50,36 +50,24 @@
  *  Use -h option for each symlink call to find syntax and options list
  */
 
-#include <fstream>
-#include <iostream>
-#include <fcntl.h>
-#include <time.h>
-#include <filesystem>
-#define FUSE_USE_VERSION 29
+#define FUSE_USE_VERSION 31
 #include <fuse.h>
 
+#include <fstream>
+#include <iostream>
+#include <filesystem>
 #include <thread>
 #include <string>
 #include <vector>
 #include <memory>
-#include <list>
 #include <map>
 #include <set>
 #include <cassert>
-#include <algorithm>
-#include <bitset>
 #include <functional>
 #include <cstdint>
-
-#include <string.h>
-#include <math.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+#include <shared_mutex>
 
 #include <boost/program_options.hpp>
-#include <boost/thread/shared_mutex.hpp>
 #include <boost/format.hpp>
 #include <boost/tokenizer.hpp>
 #include <boost/bimap.hpp>
@@ -103,7 +91,7 @@ class								fatxpar;		// partition identification & partition usefull values
 class								dskmap;			// device file allocation table management
 class								memmap;			// memory file allocation table used to handle deleted entries
 class								entry;			// file or directory entry
-class								vareas;			// vector of areas in fat
+class								vareas;			// vector of areas() in fat
 class								buffer;			// file buffer
 
 typedef std::shared_ptr<vareas>		ptr_vareas;
@@ -130,7 +118,7 @@ static const int					code_usage		= 1<<4;					// usage error code
 
 extern const char * const			sepdir;									// using unix directories
 extern const char * const			fsid;									// filesystem id
-extern const char * const			fidx;									// file used for label name
+extern const char * const			flab;									// file used for label name
 extern const char * const			def_landf;								// default directory for lost & founds
 extern const char * const			def_fpre;								// default file prefix for lost & founds
 extern const char * const			def_label;								// default label name
@@ -191,8 +179,7 @@ public:
 
 // Mutex management
 //
-class								mymutx : public boost::upgrade_mutex
-{
+class								mymutx : public shared_mutex {
 private:
 	string							nam;
 	int								cpt;
@@ -393,7 +380,7 @@ public:
 	}
 };
 
-// Data areas
+// Data areas()
 //
 class								area {
 public:
@@ -699,15 +686,6 @@ public:
 	#endif
 };
 class								entry : boost::noncopyable {
-private:
-	mymutx							mux_B;
-	mymutx							mux_D;
-	mymutx							mux_E;
-	ptr_buffer						entbuf;
-
-	void							opendir();
-	void							closedir();
-	int								write();
 public:
 	enum							status_t {
 		valid,
@@ -726,79 +704,63 @@ public:
 	};
 	static const size_t				ent_size = 64;
 	static const size_t				ent_pow	= 6;
-private:
-	template<class T>
-	T								protected_read(T r) {
-		mux_E.lock_shared();
-		T res = r;
-		mux_E.unlock_shared();
-		return res;
-	}
-	template<class T>
-	void							protected_write(T& r, const T &v) {
-		mux_E.lock();
-		r = v;
-		mux_E.unlock();
-	}
-private:
-	char							v_name[name_size + 1];
 public:
-	const char*						name() {
-		return protected_read<const char* const>(v_name);
-	}
-	void							name(const char* a) {
-		mux_E.lock();
-		strncpy(v_name, a, name_size);
-		mux_E.unlock();
-	}
-#define PROTECTED_VAR(name, type, cref) \
-private: \
-	type v_##name; \
-public: \
-	type							name() { return protected_read<cref>(v_##name); } \
-	void							name(type a) { protected_write<type>(v_##name, a); }
-	PROTECTED_VAR(cptacc,		int,				const int &)
-	PROTECTED_VAR(writeopened,	bool,				const bool &)
-	PROTECTED_VAR(status,		status_t,			const status_t &)
-	PROTECTED_VAR(namesize,		uint8_t,			const uint8_t &)
-	PROTECTED_VAR(flags,		attrib,				const attrib &)
-	PROTECTED_VAR(cluster,		clusptr,			const clusptr &)
-	PROTECTED_VAR(size,			filesize,			const filesize &)
-	PROTECTED_VAR(creation,		date,				const date &)
-	PROTECTED_VAR(access,		date,				const date &)
-	PROTECTED_VAR(update,		date,				const date &)
-	PROTECTED_VAR(loc,			streamptr,			const streamptr &)
-	PROTECTED_VAR(parent,		entry*,				entry* const)
-public:
+	mymutx							mux_B;
+	mymutx							mux_D;
+	mymutx							mux_E;
+	binary_semaphore				exclusive;
+	ptr_buffer						entbuf;
+	bool							opened;
+	char							name[name_size + 1];
+	int								cptacc;
+	bool							writeopened;
+	status_t						status;
+	uint8_t							namesize;
+	attrib							flags;
+	clusptr							cluster;
+	filesize						size;
+	date							creation;
+	date							access;
+	date							update;
+	streamptr						loc;
+	entry*							parent;
 	ptr_vector<entry>				childs;
-	PROTECTED_VAR(areas,		ptr_vareas,			const ptr_vareas)
-#undef PROTECTED_VAR
+	ptr_vareas						areas;
 public:
 									entry();
 									entry(streamptr, const char[ent_size] = nullptr);
 									entry(const string &, filesize = 0, const bool = false);
 									~entry();
 
-	string							print();
-	string							path();
-	int								addtodir(entry*);
-	void							remfrdir(entry*, bool = true);
-	entry*							find(const char*);
-	void							touch(bool = true, bool = true, bool = true);
-	int								save();
+	// Locks entry
 	int								rename(const char*);
-	void							recover();
-	void							guess();
-	bool							analyse(pass_t, const string & = string(""));
-	int								resize(const filesize);
-	int								data(char*, bool, filesize, filesize);
-	size_t							bufread(char*, filesize, filesize);
-	size_t							bufwrite(const char*, filesize, filesize);
-	int								flush(bool = true);
+	void							remfrdir(entry*, bool);
+	int								addtodir(entry*);
 	void							open(bool w);
 	void							close(bool w);
-	struct fuse_bufvec*				getbufvec(streamptr, filesize);
-	bool							operator == (entry&);
+	size_t							bufread(char*, filesize, filesize);
+	size_t							bufwrite(const char*, filesize, filesize);
+
+	// Shared locks entry
+	entry*							find(const char*);
+
+	// No entry lock
+	int								save();
+	int								write();
+	string							print();
+	void							touch(bool = true, bool = true, bool = true);
+	string							path();
+	int								resize(const filesize);
+	int								flush(bool = true);
+	int								data(char*, bool, filesize, filesize);
+
+	// Not used by FUSE
+	bool							analyse(pass_t, const string & = string(""));
+	void							guess();
+	void							recover();
+	void							opendir();
+	void							closedir();
+
 };
 class								fatx_context {
 private:
@@ -818,6 +780,25 @@ public:
 	static fatx_context*			get() { return fatxc; }
 	static void						set(fatx_context* const fc) { fatxc = fc; }
 };
+
+static int							fatx_open(const char*, fuse_file_info*);
+static int							fatx_read(const char*, char*, size_t, off_t, fuse_file_info*);
+static int							fatx_write(const char*, const char*, size_t, off_t, fuse_file_info*);
+static int							fatx_flush(const char*, fuse_file_info*);
+static int							fatx_close(const char*, fuse_file_info*);
+static int							fatx_readdir(const char*, void*, fuse_fill_dir_t, off_t, fuse_file_info*);
+static int							fatx_create(const char*, mode_t);
+static int							fatx_creope(const char*, mode_t, fuse_file_info*);
+static int							fatx_remove(const char*);
+static int							fatx_rename(const char*, const char*);
+static int							fatx_getattr(const char*, struct stat*);
+static int							fatx_chmod(const char*, mode_t);
+static int							fatx_chown(const char*, uid_t, gid_t);
+static int							fatx_truncate(const char*, off_t);
+static int							fatx_utimens(const char*, const timespec[2]);
+static int							fatx_statfs(const char*, struct statvfs*);
+static void*						fatx_init(fuse_conn_info*);
+static void							fatx_destroy(void*);
 
 template<typename key_t, typename value_t>
 			read_cache<key_t, value_t>::
@@ -850,7 +831,7 @@ typename read_cache<key_t, value_t>::value_type
 			lkval_t vv = read(k, readahead);
 			if(vv.empty()) {
 				#if !defined NDEBUG && defined DBG_CACHE
-					dbglog((format("... fatbuf: nothing for 0x%08X\n") % k).str());
+					dbglog((format("... fatbuf: nothing for 0x%08X") % k).str());
 				#endif
 				access.unlock();
 				return 0;
@@ -859,7 +840,7 @@ typename read_cache<key_t, value_t>::value_type
 				typename container_type::right_iterator b = container.right.begin();
 				std::advance(b, container.size() + vv.size() - capacity);
 				#if !defined NDEBUG && defined DBG_CACHE
-					dbglog((format("Xx. fatbuf: reduce (%d)\n") % container.size()).str());
+					dbglog((format("Xx. fatbuf: reduce (%d)") % container.size()).str());
 				#endif
 				container.right.erase(container.right.begin(), b);
 				#if !defined NDEBUG && defined DBG_CACHE
@@ -871,7 +852,7 @@ typename read_cache<key_t, value_t>::value_type
 			container.insert(typename container_type::value_type(vv.front().second, vv.front().first));
 			container.right.insert(container.right.begin(), vv.begin() + 1, vv.end());
 			#if !defined NDEBUG && defined DBG_CACHE
-				dbglog((format(".xX fatbuf: 0x%08X - 0x%08X (%d/%d)\n") % k % (k + vv.size() - 1) % vv.size() % container.size()).str());
+				dbglog((format(".xX fatbuf: 0x%08X - 0x%08X (%d/%d)") % k % (k + vv.size() - 1) % vv.size() % container.size()).str());
 				#ifdef DBG_CACHDMP
 					print();
 				#endif
@@ -900,7 +881,7 @@ int			read_cache<key_t, value_t>::
 			container.insert(typename container_type::value_type(k,v));
 		}
 		#if !defined NDEBUG && defined DBG_CACHE
-			dbglog((format("XXX fatbuf: 0x%08X (%d)\n") % k % container.size()).str());
+			dbglog((format("XXX fatbuf: 0x%08X (%d)") % k % container.size()).str());
 		#endif
 		access.unlock();
 	#endif
