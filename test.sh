@@ -9,12 +9,12 @@ FTXT=test.sh
 
 SIZE=300
 WAIT=3
-TIMEOUT=300
+TIMEOUT=30
 TABLE=file
 PARTITION=x2
 
 DSK=disk.fatx
-#DIF=disk.dif
+DIF=disk.dif
 MNT=mnt.fatx
 FUSE=
 
@@ -28,9 +28,6 @@ prepare() {
 	[ -z $DIF ] || [ -e $DIF ] || touch $DIF
 	DISK=(--table $TABLE --partition $PARTITION $DSK)
 	[ -z $DIF ] || DISK+=(--diff $DIF)
-}
-remove() {
-	rmdir $MNT
 }
 prefuse() {
 	if ! [ -c /dev/fuse ]; then
@@ -68,12 +65,12 @@ kilfuse() {
 	kill -9 $FUSE 2>/dev/null
 	FUSE=
 	fusermount -u $MNT
-	remove
+	rmdir $MNT
 }
 close() {
-	remove
+	rmdir $MNT
 	#[ -e $DSK ] && rm $DSK
-	[ -z $DIF ] || ([ -e $DIF ] && rm $DIF)
+	#[ -z $DIF ] || ([ -e $DIF ] && rm $DIF)
 	[ -z $REF ] || ([ -e $REF ] && rm $REF)
 	echo -n
 }
