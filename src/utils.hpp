@@ -2,7 +2,7 @@
 /*
  *	FATX filesystem support (Xbox 360)
  *
- *  Copyright (C) 2012-2025 Christophe Duverger
+ *  Copyright (C) 2012-2026 Christophe Duverger
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -17,6 +17,8 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+
+#include <unordered_set>
 #include <string>
 #include <sstream>
 #include <vector>
@@ -288,6 +290,15 @@ template <typename... Targs>
 void					console::	write(const std::string &s, bool err, Targs... args) {
 	(err ? std::cerr : std::cout) << std::vformat(s, std::make_format_args(args...));
 }
+
+// File name validation
+//
+class								nameval {
+private:
+    static const std::unordered_set<char> fchar;
+public:
+    static int						is_valid(std::string);
+};
 
 // Macro for debug output
 //

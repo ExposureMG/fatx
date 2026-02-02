@@ -1,7 +1,7 @@
 /*
  *	FATX filesystem support (Xbox 360)
  *
- *  Copyright (C) 2012-2025 Christophe Duverger
+ *  Copyright (C) 2012-2026 Christophe Duverger
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -525,8 +525,6 @@ int							entry::			rename(const char *n) {
 	else
 		nam = n;
 	entry *dst = fatx_context::get()->root->find(n);
-	if(!fatx_context::get()->mmi.cutname && nam.size() > name_size)
-		return -ENAMETOOLONG;
 	if(std::string(n).empty() || flags.lab || dst == this)
 		return 0;
 	if(flags.dir && dst != nullptr)

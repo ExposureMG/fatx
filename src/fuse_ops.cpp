@@ -1,7 +1,7 @@
 /*
  *	FATX filesystem support (Xbox 360)
  *
- *  Copyright (C) 2012-2025 Christophe Duverger
+ *  Copyright (C) 2012-2026 Christophe Duverger
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -119,10 +119,9 @@ int											fatx_create		(const char *path, mode_t mode) {
 		return -ENOENT;
 	if(fatx_context::get()->mmi.cutname)
 		p.resize(l + 1 + name_size);
-	else {
-		if(p.length() > name_size + l + 1)
-			return -ENAMETOOLONG;
-	}
+	int res = nameval::is_valid(p.substr(l + 1));
+	if(res != 0)
+		return res;
 	if(fatx_context::get()->root->find(path) != nullptr) {
 		if((mode & S_IFREG) == 0)
 			return -EEXIST;
@@ -188,6 +187,15 @@ int											fatx_rename		(const char *from, const char *to, unsigned int) {
 		return -EROFS;
 	if(f->flags.ro)
 		return -EACCES;
+	std::string p(from);
+	size_t l = p.find_last_of(sepdir);
+	if(l == std::string::npos || l == p.length() - 1)
+		return -ENOENT;
+	if(fatx_context::get()->mmi.cutname)
+		p.resize(l + 1 + name_size);
+	int res = nameval::is_valid(p.substr(l + 1));
+	if(res != 0)
+		return res;
 	return -f->rename(to);
 }
 int											fatx_getattr	(const char *path, struct stat* st, fuse_file_info*) {

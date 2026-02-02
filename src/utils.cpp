@@ -1,7 +1,7 @@
 /*
  *	FATX filesystem support (Xbox 360)
  *
- *  Copyright (C) 2012-2025 Christophe Duverger
+ *  Copyright (C) 2012-2026 Christophe Duverger
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -291,4 +291,25 @@ std::pair<bool, bool>		console::		read() {
 	while(d != '\n')
 		d = static_cast<char>(std::cin.get());
 	return ((c == 'y') || (c == 'Y')) ? std::make_pair(true, true) : ((c == 'n') || (c == 'N')) ? std::make_pair(true, false) : std::make_pair(false, false);
+}
+
+// Implémentation de la classe nameval
+
+const std::unordered_set<char> nameval::	fchar = {
+    '/', '\\', ':', '*', '?', '"', '<', '>', '|', '\0',
+    // Caractères de contrôle ASCII (0x00-0x1F)
+    '\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\a', '\b',
+    '\t', '\n', '\v', '\f', '\r', '\x0E', '\x0F',
+    '\x10', '\x11', '\x12', '\x13', '\x14', '\x15', '\x16', '\x17',
+    '\x18', '\x19', '\x1A', '\x1B', '\x1C', '\x1D', '\x1E', '\x1F'
+};
+int 						nameval::		is_valid(std::string name) {
+    if(name.length() == 0)
+		return -EINVAL;
+    if(name.length() > name_size)
+		return -ENAMETOOLONG;
+    return std::ranges::all_of(
+		name,
+        [&fchar] (char c) { return fchar.find(c) == fchar.end(); }
+	) ? 0 : -EINVAL;
 }

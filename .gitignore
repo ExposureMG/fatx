@@ -3,6 +3,9 @@ build/
 bin/
 out/
 
+# Infos
+*.md
+
 # VS Code configuration
 .vscode/
 *.code-workspace
