@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(fatx_tests)
 
-# Activer C++17
-set(CMAKE_CXX_STANDARD 17)
+# Activer C++26
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Trouver GTest
@@ -30,9 +30,9 @@ endif()
 # Ajouter les fichiers de test
 set(TEST_SOURCES
     test_device.cpp
-    test_dskmap.cpp
+    test_diskmap.cpp
     test_entry.cpp
-    test_fatxpar.cpp
+    test_partition.cpp
     test_utils.cpp
 )
 

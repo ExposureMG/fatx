@@ -37,16 +37,16 @@ static const int					code_ncorr		= 1<<2;					// errors remaining code
 static const int					code_operr		= 1<<3;					// internal error code
 static const int					code_usage		= 1<<4;					// usage error code
 
-const char * const					sepdir			= "/";				// using unix directories
-const char * const					fsid			= "XTAF";			// filesystem id
-const char * const					flab			= "name.txt";		// file used for label name
-const char * const					def_landf		= "lost+found";		// default directory for lost & founds
+const char * const					sepdir			= "/";		    		// using unix directories
+const char * const					fsid			= "XTAF";		    	// filesystem id
+const char * const					flab			= "name.txt";	    	// file used for label name
+const char * const					def_landf		= "lost+found";	    	// default directory for lost & founds
 
-const char * const					def_fpre		= "FILE";			// default file prefix for lost & founds
-const char * const					def_label		= "XBOX";			// default label name
-const char * const					usb_dir			= "Xbox360";		// USB drive directory
-const char * const					usb_data		= "Data";			// USB drive data file prefix
+const char * const					def_fpre		= "FILE";		    	// default file prefix for lost & founds
+const char * const					def_label		= "XBOX";		    	// default label name
+const char * const					usb_dir			= "Xbox360";	    	// USB drive directory
+const char * const					usb_data		= "Data";		    	// USB drive data file prefix
 
-const char * const					mutex_buff		= "Buffer:";
-const char * const					mutex_data		= "Data:";
-const char * const					mutex_entr		= "Entry:";
+const char * const					mutex_buff		= "Buffer:";	    	// mutex for buffer
+const char * const					mutex_data		= "Data:";		    	// mutex for data
+const char * const					mutex_entr		= "Entry:";	    	    // mutex for entry

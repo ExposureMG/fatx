@@ -28,7 +28,22 @@ find_package(
 find_package(Doxygen COMPONENTS dot)
 find_package(FUSE3 3.1 REQUIRED)
 
-set(CMAKE_CXX_STANDARD 26)
+# Chercher GoogleTest pour les tests unitaires
+find_package(GTest QUIET)
+if(NOT GTest_FOUND)
+  # Si GTest n'est pas trouvé, essayer de le télécharger avec FetchContent
+  include(FetchContent)
+  FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG v1.14.0
+  )
+  # Empêcher l'installation de GTest
+  set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+  set(INSTALL_GMOCK OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
+endif()
+
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang,GNU,LCC>")
 set(msvc_cxx "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
@@ -122,6 +137,9 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     # -DNO_LOCK
     # -DNO_CACHE
   )
+  # Ajouter les flags de couverture pour GCC/Clang en mode Debug
+  add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-fprofile-arcs>)
+  add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-ftest-coverage>)
   if(SANITIZE)
     add_compile_options(
       -fsanitize=address
@@ -190,6 +208,8 @@ add_executable(
   src/constants.hpp
   src/fatx.hpp
   src/fatx.cpp
+  src/fuse_ops.hpp
+  src/fuse_ops.cpp
   src/device.hpp
   src/device.cpp
   src/frontend.hpp
@@ -205,6 +225,8 @@ add_executable(
 )
 target_compile_features(fatx PRIVATE cxx_std_26)
 target_include_directories(fatx PRIVATE src)
+target_link_options(fatx PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-fprofile-arcs>)
+target_link_options(fatx PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-ftest-coverage>)
 if(Boost_FOUND)
   target_link_libraries(fatx Boost::program_options)
 endif()
@@ -227,6 +249,42 @@ foreach(i ${aliases})
   )
   install(FILES ${PROJECT_BINARY_DIR}/${i} TYPE SBIN)
 endforeach(i)
+
+enable_testing()
+# Tests unitaires avec GoogleTest
+if(GTest_FOUND OR googletest_POPULATED)
+  # Créer l'exécutable de test pour les constantes et composants de base
+  add_executable(fatx_tests
+    tests/test_basic.cpp
+  )
+
+  target_compile_features(fatx_tests PRIVATE cxx_std_26)
+  target_include_directories(fatx_tests PRIVATE src)
+
+  # Lier avec GoogleTest
+  target_link_libraries(fatx_tests GTest::gtest_main GTest::gmock)
+
+  # Ajouter les tests à CTest
+  include(GoogleTest)
+  gtest_discover_tests(fatx_tests)
+
+  # Ajouter une dépendance pour que les tests soient compilés après l'exécutable principal
+  add_dependencies(fatx_tests fatx)
+endif()
+
+option(CODE_COVERAGE "Enable code coverage reporting" OFF)
+
+if(CODE_COVERAGE)
+    message(STATUS "Enabling code coverage")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fprofile-arcs -ftest-coverage")
+    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -lgcov --coverage")
+    
+    # Ajouter les flags uniquement à la cible de test
+    if(TARGET fatx_tests)
+        target_compile_options(fatx_tests PRIVATE --coverage)
+        target_link_libraries(fatx_tests PRIVATE --coverage)
+    endif()
+endif()
 
 include(GNUInstallDirs)
 install(TARGETS fatx RUNTIME DESTINATION sbin)
@@ -251,7 +309,26 @@ if(DOXYGEN_FOUND)
   # install(DIRECTORY ${CMAKE_BINARY_DIR}/html TYPE DOC)
 endif(DOXYGEN_FOUND)
 
-enable_testing()
+# Cible pour générer le rapport de couverture (nécessite lcov)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  find_program(LCOV_FOUND lcov)
+  if(LCOV_FOUND)
+    add_custom_target(coverage
+      COMMAND ${CMAKE_COMMAND} -E make_directory coverage-report
+      COMMAND lcov --capture --directory ${CMAKE_BINARY_DIR} --output-file coverage.info --no-external
+      COMMAND lcov --remove coverage.info '/usr/*' '*/test_*' '*/tests/*' --output-file coverage.info
+      COMMAND genhtml coverage.info --output-directory coverage-report
+      COMMENT "Generating coverage report with lcov"
+      DEPENDS fatx
+    )
+    add_custom_target(coverage-clean
+      COMMAND ${CMAKE_COMMAND} -E remove_directory coverage-report
+      COMMAND ${CMAKE_COMMAND} -E remove coverage.info
+      COMMENT "Cleaning coverage report"
+    )
+  endif(LCOV_FOUND)
+endif()
+
 set(CTEST_OUTPUT_ON_FAILURE 1)
 find_program(BASH NAMES bash)
 execute_process(

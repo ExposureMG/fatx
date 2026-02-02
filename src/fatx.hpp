@@ -49,14 +49,13 @@
  *	Use -h option for each symlink call to find syntax and options list
  */
 
-#define FUSE_USE_VERSION 31
-
 #include "types.hpp"
 #include "device.hpp"
 #include "frontend.hpp"
 #include "partition.hpp"
 #include "diskmap.hpp"
 #include "entry.hpp"
+#include "fuse_ops.hpp"
 
 #ifndef PACKAGE_VERSION
 	#define PACKAGE_VERSION "1.18"
