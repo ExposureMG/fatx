@@ -8,6 +8,8 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 
 # Option pour activer les tests
 option(BUILD_TESTS "Build test suite" ON)
+option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
+
 if(CMAKE_BUILD_TYPE STREQUAL "")
   set(
     CMAKE_BUILD_TYPE
@@ -116,6 +118,12 @@ add_compile_options(
 add_compile_options($<$<OR:$<CONFIG:Debug>,$<BOOL:$ENV{CI}>>:$<$<CXX_COMPILER_ID:MSVC>:/WX>>)
 add_compile_options($<$<OR:$<CONFIG:Debug>,$<BOOL:$ENV{CI}>>:$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Werror>>)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  if(ENABLE_COVERAGE)
+    message(STATUS "Enabling code coverage")
+    add_compile_options(--coverage -fprofile-arcs -ftest-coverage)
+    add_link_options(--coverage)
+  endif()
+
   add_compile_options(
     # -DDBG_INIT
     # -DDBG_READ
@@ -204,10 +212,11 @@ endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 
 add_executable(
   fatx
+  src/fatx.cpp
   src/types.hpp
   src/constants.hpp
-  src/fatx.hpp
-  src/fatx.cpp
+  src/context.hpp
+  src/context.cpp
   src/fuse_ops.hpp
   src/fuse_ops.cpp
   src/device.hpp
@@ -234,6 +243,32 @@ if(FUSE3_FOUND)
   target_link_libraries(fatx FUSE3::fuse3)
 endif()
 
+# Create object library for code that tests need (excluding fatx.cpp which has app main)
+add_library(fatx_objects OBJECT
+  src/types.hpp
+  src/constants.hpp
+  src/context.hpp
+  src/context.cpp
+  src/fuse_ops.hpp
+  src/fuse_ops.cpp
+  src/device.hpp
+  src/device.cpp
+  src/frontend.hpp
+  src/frontend.cpp
+  src/partition.hpp
+  src/partition.cpp
+  src/entry.hpp
+  src/entry.cpp
+  src/diskmap.hpp
+  src/diskmap.cpp
+  src/utils.hpp
+  src/utils.cpp
+)
+target_compile_features(fatx_objects PRIVATE cxx_std_26)
+target_include_directories(fatx_objects PRIVATE src)
+target_link_options(fatx_objects PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-fprofile-arcs>)
+target_link_options(fatx_objects PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-ftest-coverage>)
+
 add_custom_target(
   test.sh
   ALL
@@ -253,23 +288,34 @@ endforeach(i)
 enable_testing()
 # Tests unitaires avec GoogleTest
 if(GTest_FOUND OR googletest_POPULATED)
-  # Créer l'exécutable de test pour les constantes et composants de base
+  # Create test executable using object library + test sources
   add_executable(fatx_tests
     tests/test_basic.cpp
+    tests/test_device.cpp
+    tests/test_diskmap.cpp
+    tests/test_entry.cpp
+    tests/test_partition.cpp
+    tests/test_utils.cpp
+    $<TARGET_OBJECTS:fatx_objects>
   )
 
   target_compile_features(fatx_tests PRIVATE cxx_std_26)
   target_include_directories(fatx_tests PRIVATE src)
+  target_link_options(fatx_tests PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-fprofile-arcs>)
+  target_link_options(fatx_tests PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-ftest-coverage>)
 
-  # Lier avec GoogleTest
+  # Link with GoogleTest and dependencies
   target_link_libraries(fatx_tests GTest::gtest_main GTest::gmock)
+  if(Boost_FOUND)
+    target_link_libraries(fatx_tests Boost::program_options)
+  endif()
+  if(FUSE3_FOUND)
+    target_link_libraries(fatx_tests FUSE3::fuse3)
+  endif()
 
-  # Ajouter les tests à CTest
+  # Discover and add tests
   include(GoogleTest)
   gtest_discover_tests(fatx_tests)
-
-  # Ajouter une dépendance pour que les tests soient compilés après l'exécutable principal
-  add_dependencies(fatx_tests fatx)
 endif()
 
 option(CODE_COVERAGE "Enable code coverage reporting" OFF)

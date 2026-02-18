@@ -29,6 +29,7 @@ endif()
 
 # Ajouter les fichiers de test
 set(TEST_SOURCES
+    test_basic.cpp
     test_device.cpp
     test_diskmap.cpp
     test_entry.cpp
@@ -42,7 +43,6 @@ add_executable(fatx_tests ${TEST_SOURCES})
 # Inclure les répertoires nécessaires
 target_include_directories(fatx_tests PRIVATE 
     ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
 )
 
 # Lier les bibliothèques
