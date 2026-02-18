@@ -140,7 +140,6 @@ int											fatx_create		(const char *path, mode_t mode) {
 		delete n;
 		return -ENOENT;
 	}
-	int res = 0;
 	if((res = s->addtodir(n))) {
 		fatx_context::get()->fat->freefat(n->cluster);
 		delete n;

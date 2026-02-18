@@ -310,6 +310,6 @@ int 						nameval::		is_valid(std::string name) {
 		return -ENAMETOOLONG;
     return std::ranges::all_of(
 		name,
-        [&fchar] (char c) { return fchar.find(c) == fchar.end(); }
+        [] (char c) { return fchar.find(c) == fchar.end(); }
 	) ? 0 : -EINVAL;
 }
