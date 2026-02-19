@@ -30,16 +30,16 @@ private:
         uint32_t					spc;
         uint32_t					root;
                                     bootsect(const char buf[blksize]) :
-            id	(byte_order<4>::litend(&buf[4])()),
-            spc	(byte_order<4>::litend(&buf[8])()),
-            root(byte_order<4>::litend(&buf[12])()) { }
+            id	(byte_order<4>::bigend(&buf[4])()),
+            spc	(byte_order<4>::bigend(&buf[8])()),
+            root(byte_order<4>::bigend(&buf[12])()) { }
                                     bootsect(const uint32_t i, const uint32_t s, const uint32_t r) :
             id(i), spc(s), root(r) { }
         void						write(char buf[blksize]) {
             memcpy(&buf[0], &fsid[0], 4);
-            memcpy(&buf[4], byte_order<4>::litend(id).data(), 4);
-            memcpy(&buf[8], byte_order<4>::litend(spc).data(), 4);
-            memcpy(&buf[12], byte_order<4>::litend(root).data(), 4);
+            memcpy(&buf[4], byte_order<4>::bigend(id).data(), 4);
+            memcpy(&buf[8], byte_order<4>::bigend(spc).data(), 4);
+            memcpy(&buf[12], byte_order<4>::bigend(root).data(), 4);
         }
     };
     class							devheader {
@@ -51,12 +51,12 @@ private:
         uint32_t					p1_start;
         uint32_t					p1_size;
                                     devheader(char const buf [blksize]) :
-            id			(byte_order<4>::litend(&buf[0])()),
-            unkn		(byte_order<4>::litend(&buf[4])()),
-            p2_start	(byte_order<4>::litend(&buf[8])()),
-            p2_size		(byte_order<4>::litend(&buf[12])()),
-            p1_start	(byte_order<4>::litend(&buf[16])()),
-            p1_size		(byte_order<4>::litend(&buf[20])()) { }
+            id			(byte_order<4>::bigend(&buf[0])()),
+            unkn		(byte_order<4>::bigend(&buf[4])()),
+            p2_start	(byte_order<4>::bigend(&buf[8])()),
+            p2_size		(byte_order<4>::bigend(&buf[12])()),
+            p1_start	(byte_order<4>::bigend(&buf[16])()),
+            p1_size		(byte_order<4>::bigend(&buf[20])()) { }
                                     devheader(const uint64_t s) :
             id(0x00020000),
             unkn(0),
@@ -65,11 +65,11 @@ private:
             p1_start(0x005B3000),
             p1_size(0x00080000) { }
         void						write(char buf[blksize]) {
-            memcpy(&buf[0], byte_order<4>::litend(id).data(), 4);
-            memcpy(&buf[8], byte_order<4>::litend(p2_start).data(), 4);
-            memcpy(&buf[12], byte_order<4>::litend(p2_size).data(), 4);
-            memcpy(&buf[16], byte_order<4>::litend(p1_start).data(), 4);
-            memcpy(&buf[20], byte_order<4>::litend(p1_size).data(), 4);
+            memcpy(&buf[0], byte_order<4>::bigend(id).data(), 4);
+            memcpy(&buf[8], byte_order<4>::bigend(p2_start).data(), 4);
+            memcpy(&buf[12], byte_order<4>::bigend(p2_size).data(), 4);
+            memcpy(&buf[16], byte_order<4>::bigend(p1_start).data(), 4);
+            memcpy(&buf[20], byte_order<4>::bigend(p1_size).data(), 4);
         }
     };
     class							usbheader {

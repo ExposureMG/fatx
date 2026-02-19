@@ -16,7 +16,7 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "fatx.hpp"
+#include "context.hpp"
 
 #include <filesystem>
 
@@ -73,8 +73,8 @@
 	status(invalid),
 	namesize(static_cast<uint8_t>(buf != nullptr ? buf[0] : 0)),
 	flags(buf != nullptr ? buf[1] : '\0'),
-	cluster(buf != nullptr ? byte_order<4>::litend(&buf[0x2C])() : 0),
-	size(buf != nullptr ? byte_order<4>::litend(&buf[0x30])() : 0),
+	cluster(buf != nullptr ? byte_order<4>::bigend(&buf[0x2C])() : 0),
+	size(buf != nullptr ? byte_order<4>::bigend(&buf[0x30])() : 0),
 	creation(reinterpret_cast<const unsigned char *>((buf != nullptr ? &buf[0x34] : "\0\0\0\0"))),
 	access(reinterpret_cast<const unsigned char *>((buf != nullptr ? &buf[0x38] : "\0\0\0\0"))),
 	update(reinterpret_cast<const unsigned char *>((buf != nullptr ? &buf[0x3C] : "\0\0\0\0"))),
@@ -502,8 +502,8 @@ int							entry::			write(bool l) {
 		buf[0] = static_cast<char>((status == delwdata || status == delnodata) ? deleted_size : strlen(name));
 		flags.write(&buf[1]);
 		memcpy(&buf[2], name, name_size);
-		memcpy(&buf[0x2C], byte_order<4>::litend(static_cast<byte_order<4>::value_type>(cluster)).data(), 4);
-		memcpy(&buf[0x30], byte_order<4>::litend(static_cast<byte_order<4>::value_type>(size)).data(), 4);
+		memcpy(&buf[0x2C], byte_order<4>::bigend(static_cast<byte_order<4>::value_type>(cluster)).data(), 4);
+		memcpy(&buf[0x30], byte_order<4>::bigend(static_cast<byte_order<4>::value_type>(size)).data(), 4);
 		creation.write(reinterpret_cast<unsigned char*>(&buf[0x34]));
 		access.write(reinterpret_cast<unsigned char*>(&buf[0x38]));
 		update.write(reinterpret_cast<unsigned char*>(&buf[0x3C]));

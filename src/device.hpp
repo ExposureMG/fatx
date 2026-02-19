@@ -32,11 +32,11 @@ private:
     };
     class							chgfile : public std::map<streamptr, segment> {
     private:
-        [[nodiscard]] bool			addseg(streamptr, const std::string&);
+        [[nodiscard]] bool			addseg(std::fstream&, streamptr, const std::string&);
     public:
-        [[nodiscard]] bool			load();
-        [[nodiscard]] bool			read(streamptr, const size_t, std::string &);
-        [[nodiscard]] bool			write(streamptr, const std::string &);
+        [[nodiscard]] bool			load(std::fstream&);
+        [[nodiscard]] bool			read(std::fstream&, streamptr, const size_t, std::string &);
+        [[nodiscard]] bool			write(std::fstream&, streamptr, const std::string &);
     };
     std::fstream					io;
     std::fstream					iod;

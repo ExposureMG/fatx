@@ -16,7 +16,7 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "fatx.hpp"
+#include "context.hpp"
 
 // Implémentation des méthodes de la classe vareas
 
@@ -29,7 +29,7 @@ clusptr						vareas::		last() const {
 size_t						vareas::		nbcls(clusptr c) const {
 	size_t res = 0;
 	for(const area& i: *this) {
-		res += (c >= i.start && c <= i.stop) ? c : i.stop - i.start + 1;
+		res += (c >= i.start && c <= i.stop) ? c - i.start + 1 : i.stop - i.start + 1;
 		if(c >= i.start && c <= i.stop)
 			break;
 	}
@@ -171,7 +171,7 @@ string						vareas::		print() const {
 	#endif
 }
 void						buffer::		enlarge(const streamptr s) {
-	if(s > static_cast<streamptr>(max_buf))
+	if(s <= size() || s > max_buf)
 		return;
 	resize(s);
 	if(size() < s) {
@@ -296,7 +296,7 @@ std::pair<bool, bool>		console::		read() {
 // Implémentation de la classe nameval
 
 const std::unordered_set<char> nameval::	fchar = {
-    '/', '\\', ':', '*', '?', '"', '<', '>', '|', '\0',
+    '/', '\\', ':', '*', '?', '"', '<', '>', '|', '\0', ' ', '\x7F',
     // Caractères de contrôle ASCII (0x00-0x1F)
     '\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\a', '\b',
     '\t', '\n', '\v', '\f', '\r', '\x0E', '\x0F',

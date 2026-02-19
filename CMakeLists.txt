@@ -4,7 +4,7 @@ project(
   VERSION 1.18
   LANGUAGES C CXX
 )
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
+set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/scripts)
 
 # Option pour activer les tests
 option(BUILD_TESTS "Build test suite" ON)
@@ -52,7 +52,7 @@ set(msvc_cxx "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
 
 add_compile_options(
   -D_FILE_OFFSET_BITS=64
-  # -fdiagnostics-color
+  -fdiagnostics-color
   -DPACKAGE_VERSION=${PROJECT_VERSION}
   -Wall
   -Wextra
@@ -113,7 +113,8 @@ add_compile_options(
   -Wunused-macros
   -Wuseless-cast
   -Wzero-as-null-pointer-constant
-  -Wno-inline)
+  -Wno-inline
+)
 
 add_compile_options($<$<OR:$<CONFIG:Debug>,$<BOOL:$ENV{CI}>>:$<$<CXX_COMPILER_ID:MSVC>:/WX>>)
 add_compile_options($<$<OR:$<CONFIG:Debug>,$<BOOL:$ENV{CI}>>:$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Werror>>)
@@ -121,7 +122,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   if(ENABLE_COVERAGE)
     message(STATUS "Enabling code coverage")
     add_compile_options(--coverage -fprofile-arcs -ftest-coverage)
-    add_link_options(--coverage)
+    add_link_options(-lgcov --coverage)
   endif()
 
   add_compile_options(
@@ -272,7 +273,7 @@ target_link_options(fatx_objects PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-ftest-c
 add_custom_target(
   test.sh
   ALL
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/test.sh ${PROJECT_BINARY_DIR}
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/scripts/test.sh ${PROJECT_BINARY_DIR}
 )
 set(aliases fusefatx mkfs.fatx label.fatx fsck.fatx unrm.fatx)
 foreach(i ${aliases})
@@ -291,9 +292,15 @@ if(GTest_FOUND OR googletest_POPULATED)
   # Create test executable using object library + test sources
   add_executable(fatx_tests
     tests/test_basic.cpp
+    tests/test_context.cpp
     tests/test_device.cpp
     tests/test_diskmap.cpp
     tests/test_entry.cpp
+    tests/test_fatx.cpp
+    tests/test_frontend.cpp
+    tests/test_context_setup.cpp
+    tests/test_fuse_ops.cpp
+    tests/test_integration.cpp
     tests/test_partition.cpp
     tests/test_utils.cpp
     $<TARGET_OBJECTS:fatx_objects>
@@ -312,24 +319,14 @@ if(GTest_FOUND OR googletest_POPULATED)
   if(FUSE3_FOUND)
     target_link_libraries(fatx_tests FUSE3::fuse3)
   endif()
+  if(ENABLE_COVERAGE)
+    target_compile_options(fatx_tests PRIVATE --coverage)
+    target_link_options(fatx_tests PRIVATE --coverage)
+  endif()
 
   # Discover and add tests
   include(GoogleTest)
   gtest_discover_tests(fatx_tests)
-endif()
-
-option(CODE_COVERAGE "Enable code coverage reporting" OFF)
-
-if(CODE_COVERAGE)
-    message(STATUS "Enabling code coverage")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fprofile-arcs -ftest-coverage")
-    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -lgcov --coverage")
-    
-    # Ajouter les flags uniquement à la cible de test
-    if(TARGET fatx_tests)
-        target_compile_options(fatx_tests PRIVATE --coverage)
-        target_link_libraries(fatx_tests PRIVATE --coverage)
-    endif()
 endif()
 
 include(GNUInstallDirs)
@@ -338,47 +335,55 @@ install(DIRECTORY man8 TYPE MAN)
 install(
   FILES
   README
-	COPYING
-	TODO
-	AUTHORS
-	BUGS
-	NEWS
-	INSTALL
-	ChangeLog
-	doc/fatx.jpg
+  COPYING
+  TODO
+  AUTHORS
+  BUGS
+  NEWS
+  INSTALL
+  ChangeLog
+  doc/fatx.jpg
   TYPE DOC
 )
 
-set(DOXYGEN_PROJECT_LOGO doc/fatx.jpg)
-doxygen_add_docs(doc src)
+set(DOXYGEN_PROJECT_LOGO ${PROJECT_SOURCE_DIR}/doc/fatx.jpg)
 if(DOXYGEN_FOUND)
+  add_custom_target(doxygen EXCLUDE_FROM_ALL
+    COMMAND ${DOXYGEN_EXECUTABLE} ${PROJECT_SOURCE_DIR}/doc/doxygen.cfg
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/doc
+    COMMENT "Generating Doxygen documentation"
+    VERBATIM
+  )
   # install(DIRECTORY ${CMAKE_BINARY_DIR}/html TYPE DOC)
-endif(DOXYGEN_FOUND)
+endif()
 
-# Cible pour générer le rapport de couverture (nécessite lcov)
+# Cible pour générer le rapport de couverture avec analyse par module (nécessite lcov)
+find_program(PYTHON3_EXECUTABLE python3)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   find_program(LCOV_FOUND lcov)
-  if(LCOV_FOUND)
+  find_program(GENHTML_FOUND genhtml)
+  if(LCOV_FOUND AND GENHTML_FOUND AND PYTHON3_EXECUTABLE)
     add_custom_target(coverage
-      COMMAND ${CMAKE_COMMAND} -E make_directory coverage-report
-      COMMAND lcov --capture --directory ${CMAKE_BINARY_DIR} --output-file coverage.info --no-external
-      COMMAND lcov --remove coverage.info '/usr/*' '*/test_*' '*/tests/*' --output-file coverage.info
-      COMMAND genhtml coverage.info --output-directory coverage-report
-      COMMENT "Generating coverage report with lcov"
-      DEPENDS fatx
+      COMMAND ${PYTHON3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/generate_coverage.py
+      COMMENT "Generating coverage report with module analysis"
+      DEPENDS fatx_tests
     )
     add_custom_target(coverage-clean
-      COMMAND ${CMAKE_COMMAND} -E remove_directory coverage-report
-      COMMAND ${CMAKE_COMMAND} -E remove coverage.info
-      COMMENT "Cleaning coverage report"
+      COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/coverage-report
+      COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/coverage_final_report
+      COMMAND ${CMAKE_COMMAND} -E remove ${CMAKE_BINARY_DIR}/coverage.info
+      COMMAND ${CMAKE_COMMAND} -E remove ${CMAKE_BINARY_DIR}/coverage_final.info
+      COMMENT "Cleaning coverage reports"
     )
-  endif(LCOV_FOUND)
+  else()
+    message(STATUS "Coverage report target skipped: missing lcov (${LCOV_FOUND}), genhtml (${GENHTML_FOUND}), or python3 (${PYTHON3_EXECUTABLE})")
+  endif()
 endif()
 
 set(CTEST_OUTPUT_ON_FAILURE 1)
 find_program(BASH NAMES bash)
 execute_process(
-  COMMAND ${BASH} ${PROJECT_SOURCE_DIR}/test.sh
+  COMMAND ${BASH} ${PROJECT_SOURCE_DIR}/scripts/test.sh
 	OUTPUT_VARIABLE names
 )
 list(LENGTH names nbtst)
@@ -388,3 +393,14 @@ foreach(i RANGE 0 ${nb})
   message("-- Found test: ${test_name}")
   add_test(NAME ${test_name} COMMAND ${BASH} test.sh ${i})
 endforeach(i)
+
+# Add a convenient target to run all tests via CTest
+add_custom_target(run_all_tests
+  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+  DEPENDS fatx_tests fatx
+  COMMENT "Run all tests with CTest"
+)
+
+# Alias `run_tests` -> `run_all_tests` for convenience
+add_custom_target(run_tests DEPENDS run_all_tests)

@@ -16,15 +16,15 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "fatx.hpp"
+#include "context.hpp"
 
 // Implémentation des méthodes de la classe device
 
-bool					device::chgfile::	load() {
+bool					device::chgfile::	load(std::fstream& iod) {
 	streamptr o = 0;
 	streamptr p = 0;
 	streamptr s = 0;
-	auto& iod = fatx_context::get()->dev.iod;
+	iod.clear();
 	while(iod
 		.seekg(static_cast<std::basic_istream<char>::off_type>(o))
 		.read(reinterpret_cast<char*>(&p), sizeof(p))
@@ -50,7 +50,7 @@ bool					device::chgfile::	load() {
 	iod.clear();
 	return false;
 }
-bool					device::chgfile::	read(streamptr p, const size_t s, std::string &buf) {
+bool					device::chgfile::	read(std::fstream& iod, streamptr p, const size_t s, std::string &buf) {
 	#if !defined NDEBUG && defined DBG_DIFF
 		dbglog("=>  Read diffile at 0x{:016X}({})", p, s);
 	#endif
@@ -70,7 +70,7 @@ bool					device::chgfile::	read(streamptr p, const size_t s, std::string &buf) {
 			(e == end() ? "end" : std::format("0x{:016X}[0x{:016X}({})]", e->second.position, e->first, e->second.size))
 		);
 	#endif
-	auto& iod = fatx_context::get()->dev.iod;
+	iod.clear();
 	streamptr c = 0;
 	for(auto i = b; i != e; i++) {
 		auto pos = i->second.position;
@@ -85,7 +85,7 @@ bool					device::chgfile::	read(streamptr p, const size_t s, std::string &buf) {
 		if(iod
 			.seekg(static_cast<std::basic_istream<char>::off_type>(pos))
 			.read(&buf[c], static_cast<std::streamsize>(siz))
-			.bad()
+			.fail()
 		) {
 			console::write("Can't read diffile at 0x{:016X}.\n", true, p);
 			iod.clear();
@@ -95,10 +95,11 @@ bool					device::chgfile::	read(streamptr p, const size_t s, std::string &buf) {
 	}
 	return false;
 }
-bool					device::chgfile::	write(streamptr p, const std::string &buf) {
+bool					device::chgfile::	write(std::fstream& iod, streamptr p, const std::string &buf) {
 	#if !defined NDEBUG && defined DBG_DIFF
 		dbglog("=>  Write diffile at 0x{:016X}({})", p, buf.size());
 	#endif
+	iod.clear();
 	for(auto l = p; l < p + buf.size();) {
 		auto b = lower_bound(l); // *b >= l
 		if(l == p) {
@@ -109,12 +110,12 @@ bool					device::chgfile::	write(streamptr p, const std::string &buf) {
 			}
 		}
 		if(b == end()) {
-			if(addseg(l, buf.substr(l - p)))
+			if(addseg(iod, l, buf.substr(l - p)))
 				return true;
 			break;
 		}
 		if(b->first > l) {
-			if(addseg(l, buf.substr(l - p, b->first - l)))
+			if(addseg(iod, l, buf.substr(l - p, b->first - l)))
 				return true;
 			l = b->first;
 			continue;
@@ -132,11 +133,10 @@ bool					device::chgfile::	write(streamptr p, const std::string &buf) {
 		#if !defined NDEBUG && defined DBG_DIFF
 			dbglog("... write diffile at 0x{:016X} [0x{:016X}({})]", pos, l, siz);
 		#endif
-		auto& iod = fatx_context::get()->dev.iod;
 		if(iod
 			.seekp(static_cast<std::basic_istream<char>::off_type>(pos))
 			.write(&buf[l - p], static_cast<std::streamsize>(siz))
-			.bad()
+			.fail()
 		) {
 			console::write("Can't write diffile at 0x{:016X}.\n", true, p);
 			iod.clear();
@@ -146,19 +146,19 @@ bool					device::chgfile::	write(streamptr p, const std::string &buf) {
 	}
 	return false;
 }
-bool					device::chgfile::	addseg(streamptr p, const std::string& buf) {
+bool					device::chgfile::	addseg(std::fstream& iod, streamptr p, const std::string& buf) {
 	streamptr s = buf.size();
 	device::segment seg;
-	auto& iod = fatx_context::get()->dev.iod;
+	iod.clear();
 	seg.size = s;
-	seg.position = static_cast<streamptr>(iod.seekg(0, std::ios::end).tellg()) + 2 * sizeof(char*);
+	seg.position = static_cast<streamptr>(iod.seekg(0, std::ios::end).tellg()) + sizeof(streamptr) + sizeof(filesize);
 	bool status = false;
 	status = status || iod
 		.seekp(0, std::ios::end)
 		.write(reinterpret_cast<char*>(&p), sizeof(p))
 		.write(reinterpret_cast<char*>(&s), sizeof(s))
 		.write(&buf[0], static_cast<std::streamsize>(s))
-		.bad()
+		.fail()
 	;
 	if(status) {
 		console::write("Can't add segment in diffile at 0x{:016X}.\n", true, p);
@@ -173,13 +173,12 @@ bool					device::chgfile::	addseg(streamptr p, const std::string& buf) {
 }
 
 						device::			device() :
-	io(nullptr), iod(nullptr),
 	tot_size(0), changes(false), authd("DEV"), chgf() {
 }
 						device::			~device() {
-	if(io)
+	if(io.is_open())
 		io.close();
-	if(iod)
+	if(iod.is_open())
 		iod.close();
 	for(auto &i: usbd)
 		i.second.close();
@@ -193,14 +192,14 @@ int						device::			setup() {
 		)))
 			.seekg(0)
 			.seekg(0, std::ios::end)
-			.bad()
+			.fail()
 		;
 		tot_size = err ? 0 : static_cast<streamptr>(io.tellg());
 		if(fatx_context::get()->mmi.writeable() && fatx_context::get()->mmi.diffile.empty()) {
 			err = err || io
 				.seekp(0)
 				.seekp(0, std::ios::end)
-				.bad()
+				.fail()
 			;
 		}
 	}
@@ -208,20 +207,23 @@ int						device::			setup() {
 		auto path = fatx_context::get()->mmi.input + sepdir;
 		streamptr p = 0;
 		std::fstream f;
-		if(f = std::fstream(path + usb_data + "0000", std::ios::binary | std::ios::in), f.good())
+		f.open(path + usb_data + "0000", std::ios::binary | std::ios::in);
+		if(f.good())
 			path = path + usb_data;
 		else {
+			f.close();
+			f.clear();
 			path = path + usb_dir + sepdir + usb_data;
 			f.open(path + "0000", std::ios::binary | std::ios::in);
-			err = err || f.bad();
+			err = err || f.fail();
 		}
 		char buf[8];
 		err = err || f
 			.seekg(static_cast<std::basic_istream<char>::off_type>(0x240))
 			.read(&buf[0], static_cast<std::streamsize>(8))
-			.bad()
+			.fail()
 		;
-		streamptr dts = err ? 0 : byte_order<8>::litend(&buf[0])();
+		streamptr dts = err ? 0 : byte_order<8>::bigend(&buf[0])();
 		#if !defined NDEBUG && defined DBG_INIT
 			dbglog("USB Data of size: {}.", dts);
 		#endif
@@ -230,22 +232,22 @@ int						device::			setup() {
 		streamptr s = 0;
 		streamptr ts = 0;
 		streamptr cts = 0;
-		while(!err && (i <= 1 || p < dts)) {
+		while(!err && (i <= 1 || cts < dts)) {
 			sprintf(&buf[0], "%04lu", i);
 			f.open(path + buf, std::ios::binary | (
 				fatx_context::get()->mmi.writeable() && fatx_context::get()->mmi.diffile.empty() ? (std::ios::out | std::ios::in) : std::ios::in
 			));
-			err = err || f.bad();
+			err = err || f.fail();
 			err = err || f				
 				.seekg(0)
 				.seekg(0, std::ios::end)
-				.bad()
+				.fail()
 			;
 			if(fatx_context::get()->mmi.writeable() && fatx_context::get()->mmi.diffile.empty()) {
 				err = err || f
 					.seekp(0)
 					.seekp(0, std::ios::end)
-					.bad()
+					.fail()
 				;
 			}
 			if(!err) {
@@ -273,24 +275,24 @@ int						device::			setup() {
 		)))
 			.seekg(0)
 			.seekg(0, std::ios::end)
-			.bad()
+			.fail()
 		;
 		if(fatx_context::get()->mmi.writeable()) {
 			err = err || iod
 				.seekp(0)
 				.seekp(0, std::ios::end)
-				.bad()
+				.fail()
 			;
 			iod.close();
 			iod.open(fatx_context::get()->mmi.diffile, std::ios::binary | std::ios::out | std::ios::in);
-			err = err || iod.bad();
+			err = err || iod.fail();
 		}
-		err = err || chgf.load();
+		err = err || chgf.load(iod);
 	}
 	if(err) {
-		if(io)
+		if(io.is_open())
 			io.close();
-		if(iod)
+		if(iod.is_open())
 			iod.close();
 		for(auto &i: usbd)
 			i.second.close();
@@ -325,7 +327,7 @@ std::string				device::			read(streamptr p, size_t s) {
 		status = status || io
 			.seekg(static_cast<std::basic_istream<char>::off_type>(p))
 			.read(&res[0], static_cast<std::streamsize>(s))
-			.bad()
+			.fail()
 		;
 		if(status)
 			io.clear();
@@ -342,7 +344,7 @@ std::string				device::			read(streamptr p, size_t s) {
 			status = status || i->second
 				.seekg(static_cast<std::basic_istream<char>::off_type>(pos))
 				.read(&res[c], static_cast<std::streamsize>(siz))
-				.bad()
+				.fail()
 			;
 			if(status) {
 				i->second.clear();
@@ -351,8 +353,8 @@ std::string				device::			read(streamptr p, size_t s) {
 			c += siz;
 		}
 	}
-	if(iod)
-		status = status || chgf.read(p, s, res);
+	if(iod.is_open())
+		status = status || chgf.read(iod, p, s, res);
 	if(status) {
 		console::write("Unreadable block at 0x{:016X}.\n", true, p);
 		authd.unlock();
@@ -378,14 +380,14 @@ int						device::			write(streamptr p, const std::string &s) {
 	bool status = false;
 	authd.lock();
 	#ifndef NO_WRITE
-		if(iod)
-			status = status || chgf.write(p, s);
+		if(iod.is_open())
+			status = status || chgf.write(iod, p, s);
 		else
 			if(usbd.empty()) {
 				status = status || io
 					.seekp(static_cast<std::basic_istream<char>::off_type>(p))
 					.write(&s[0], static_cast<std::streamsize>(s.size()))
-					.bad()
+					.fail()
 				;
 				if(status)
 					io.clear();
@@ -402,7 +404,7 @@ int						device::			write(streamptr p, const std::string &s) {
 					status = status || i->second
 						.seekp(static_cast<std::basic_ostream<char>::off_type>(pos))
 						.write(&s[c], static_cast<std::streamsize>(siz))
-						.bad()
+						.fail()
 					;
 					if(status) {
 						i->second.clear();

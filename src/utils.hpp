@@ -44,7 +44,7 @@ private:
 	public:
 		using value_type = typename boost::uint_t<bytes * 8>::least;
 	private:
-		size_t						pos(const size_t i) const { return (big == 0) ? bytes - 1 - i : i; }
+		size_t						pos(const size_t i) const { return (big == 0) ? i : bytes - 1 - i; }
 		std::string::value_type		getbyte(const value_type n, const size_t i = 0) const {
 			return std::string::value_type((n & (0xFFULL << (pos(i) * 8))) >> (pos(i) * 8));
 		}

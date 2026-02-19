@@ -17,38 +17,6 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
- *	Compile with:
- *	-D NDEBUG		to avoid produce debug informations output
- *	-D DBG_INIT		to produce debug on initialisation sequence
- *	-D DBG_READ		to print bytes read at device level
- *	-D DBG_WRITE	to print bytes written at device level
- *	-D DBG_DIFF		to print accesses to diff file
- *	-D DBG_SEM		to print accesses to semaphores
- *	-D DBGSEM=\"x\"	to print only semaphore named x
- *	-D DBG_BUFFER	to print buffer operations
- *	-D DBGBUFDMP=x	to print x bytes of buffer at each change
- *	-D DBG_CACHE	to print cache operations
- *	-D DBG_CACHDMP	to dump cache at each change
- *	-D DBG_AREAS	to print fat areas()
- *	-D DBG_GUESS	to print guesses
- *	-D DBGCR=x		to limit to x bytes per line
- *	-D DBGLIMIT=x	to limit to x bytes the printing of read/write
- *	-D DBG_FAT		to print the FAT
- *	-D DBG_GAPS		to print gaps
- *	-D NO_WRITE		to fake writing but no modification is done
- *	-D NO_CACHE		to disable FAT cache
- *
- *	Make symlink to executable with names:
- *	"fusefatx"		for fuse filesystem support
- *	"mkfs.fatx"		for filesystem creation
- *	"fsck.fatx"		for filesystem check and repair
- *	"unrm.fatx"		for recovery of deleted files
- *	"label.fatx"	for display or change volume label
- *
- *	Use -h option for each symlink call to find syntax and options list
- */
-
 #include "types.hpp"
 #include "device.hpp"
 #include "frontend.hpp"

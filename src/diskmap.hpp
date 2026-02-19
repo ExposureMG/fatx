@@ -56,11 +56,11 @@ protected:
     std::set<clusptr>				bad;
     bool							scanned;
 
+public:
     static void						forfat(const lbdfat_t &);
     memnext_t::lkval_t				real_read(clusptr, size_t);
     int								real_write(clusptr, clusptr);
 
-public:
     enum							status_t {
         disk,
         deleted,

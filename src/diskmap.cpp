@@ -16,7 +16,7 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "fatx.hpp"
+#include "context.hpp"
 
 // Implémentation des méthodes de la classe dskmap
 
@@ -47,8 +47,8 @@ void						dskmap::		forfat(const lbdfat_t &lbd) {
 		)
 			lbd(c,
 				(fatx_context::get()->par.chain_size == 4) ?
-				byte_order<4>::litend(&buf[static_cast<std::string::size_type>(i * fatx_context::get()->par.chain_size)])() :
-				byte_order<2>::litend(&buf[static_cast<std::string::size_type>(i * fatx_context::get()->par.chain_size)])()
+				byte_order<4>::bigend(&buf[static_cast<std::string::size_type>(i * fatx_context::get()->par.chain_size)])() :
+				byte_order<2>::bigend(&buf[static_cast<std::string::size_type>(i * fatx_context::get()->par.chain_size)])()
 			);
 	}
 }
@@ -57,7 +57,7 @@ dskmap::memnext_t::lkval_t  dskmap::		real_read(clusptr p, size_t s) {
 	s = std::min<size_t>(s, fatx_context::get()->par.clus_fat - p);
 	std::string &&buf = fatx_context::get()->dev.read(clsarithm::cls2fat(p), fatx_context::get()->par.chain_size * s);
 	for(size_t i = 0; i < buf.size(); i += fatx_context::get()->par.chain_size) {
-		clusptr a = (fatx_context::get()->par.chain_size == 4) ? byte_order<4>::litend(&buf[i])() : byte_order<2>::litend(&buf[i])();
+		clusptr a = (fatx_context::get()->par.chain_size == 4) ? byte_order<4>::bigend(&buf[i])() : byte_order<2>::bigend(&buf[i])();
 		if(fatx_context::get()->par.chain_size == 2 && a == (EOC & 0xFFFF))
 			a = EOC;
 		if(a != FLK && a != EOC && a > fatx_context::get()->par.clus_fat && bad.find(p + i) == bad.end()) {
@@ -81,9 +81,9 @@ dskmap::memnext_t::lkval_t  dskmap::		real_read(clusptr p, size_t s) {
 int							dskmap::		real_write(clusptr p, clusptr v) {
 	std::string buf(fatx_context::get()->par.chain_size, '\0');
 	if(fatx_context::get()->par.chain_size == 4)
-		buf = byte_order<4>::litend(static_cast<byte_order<4>::value_type>(v));
+		buf = byte_order<4>::bigend(static_cast<byte_order<4>::value_type>(v));
 	else
-		buf = byte_order<2>::litend(static_cast<byte_order<2>::value_type>(v));
+		buf = byte_order<2>::bigend(static_cast<byte_order<2>::value_type>(v));
 	return fatx_context::get()->dev.write(clsarithm::cls2fat(p), buf);
 }
 vareas						dskmap::		getareas(clusptr orig, const lbdarea_t &lbd) {
@@ -428,8 +428,8 @@ int							dskmap::		resizefat(ptr_vareas o, clusptr s) {
 			freefat(o->at(s + 1));
 		authm.lock();
 		o->erase(o->in(s) + 1, o->end());
-		o->back().size -= o->nbcls() - s;
-		o->back().stop = o->back().start + o->back().size - 1;
+		o->back().size -= (o->nbcls() - s) << fatx_context::get()->par.clus_pow;
+		o->back().stop = o->back().start + (o->back().size >> fatx_context::get()->par.clus_pow) - 1;
 		authm.unlock();
 	}
 	return res;
@@ -516,7 +516,8 @@ void						memmap::		fatlost() {
 void						memmap::		fatcheck() {
 	if(fatx_context::get()->mmi.prog == frontend::fsck) {
 		// we propose to correct each erroneous entry in fat
-		for(const auto& p: memchain) {
+		for(auto it = memchain.begin(); it != memchain.end(); ) {
+			const auto& p = *it;
 			if(status(p.first) == modified) {
 				console::write("Cluster number in FAT 0x{:08X} shall be {} instead of {}. Correct it ?", fatx_context::get()->mmi.dialog,
 					p.first,
@@ -526,9 +527,11 @@ void						memmap::		fatcheck() {
 				if(fatx_context::get()->mmi.getanswer(true)) {
 					if(write(p.first, p.second.next))
 						return;
-					memchain.erase(p.first);
+					it = memchain.erase(it);
+					continue;
 				}
 			}
+			++it;
 		}
 	}
 	if(fatx_context::get()->mmi.prog == frontend::fsck || fatx_context::get()->mmi.prog == frontend::unrm) {
