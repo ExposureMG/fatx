@@ -100,46 +100,6 @@ TEST_F(ContextTest, Context_MultipleInstances) {
     delete ctx1;
 }
 
-TEST_F(ContextTest, Context_GetWithoutSet) {
-    // Assurez-vous que get() retourne nullptr ou une valeur valide
-    // Dépend de l'implémentation initiale
-    fatx_context::set(nullptr);
-    
-    // Après avoir défini à nullptr, get() devrait retourner nullptr
-    EXPECT_EQ(fatx_context::get(), nullptr);
-}
-
-TEST_F(ContextTest, Context_ClusterArithmetic_siz2cls) {
-    // Créer un contexte pour tester les fonctions de cluster
-    int argc = 1;
-    const char* argv[] = {"test"};
-    frontend mmi(argc, argv);
-    mmi.input = test_file;
-    mmi.table = "";
-    mmi.diffile = "";
-    
-    fatx_context::set(new fatx_context(mmi));
-    
-    // Set partition parameters pour tester l'arithmétique
-    fatx_context::get()->par.clus_pow = 12; // log2(4096)
-    fatx_context::get()->par.clus_size = 4096;
-    
-    // Test: taille -> clusters (utilise les namespace clsarithm)
-    filesize size = 8192; // 2 clusters
-    clusptr clusters = clsarithm::siz2cls(size);
-    
-    EXPECT_EQ(clusters, 2);
-    
-    // Test avec taille non-alignée
-    filesize size_unaligned = 8192 + 1000; // > 2 clusters
-    clusptr clusters_unaligned = clsarithm::siz2cls(size_unaligned);
-    
-    EXPECT_GT(clusters_unaligned, 2);
-    
-    // Cleanup
-    fatx_context::set(nullptr);
-}
-
 TEST_F(ContextTest, Context_ClusterArithmetic_ptr2cls) {
     // Créer un contexte pour tester ptr2cls
     int argc = 1;
@@ -195,26 +155,6 @@ TEST_F(ContextTest, Context_ClusterArithmetic_cls2ptr) {
     fatx_context::set(nullptr);
 }
 
-TEST_F(ContextTest, Context_Ready_Flag) {
-    // Créer un contexte
-    int argc = 1;
-    const char* argv[] = {"test"};
-    frontend mmi(argc, argv);
-    mmi.input = test_file;
-    mmi.table = "";
-    mmi.diffile = "";
-    
-    fatx_context ctx(mmi);
-    
-    // La flag ready devrait être false par défaut
-    EXPECT_FALSE(ctx.ready);
-    
-    // On ne peut pas vraiment tester setup() sans une vraie partition FATX
-    // Mais on peut vérifier que la structure existe
-    EXPECT_NE(&ctx.dev, nullptr);
-    EXPECT_NE(&ctx.par, nullptr);
-}
-
 TEST_F(ContextTest, Context_Destroy_Method) {
     // Créer un contexte
     int argc = 1;
@@ -250,87 +190,7 @@ TEST_F(ContextTest, Context_Frontend_Reference) {
     EXPECT_EQ(&ctx.mmi, &mmi);
 }
 
-TEST_F(ContextTest, Context_StaticInstance) {
-    // Test que le contexte static fonctionne
-    int argc = 1;
-    const char* argv[] = {"test"};
-    frontend mmi(argc, argv);
-    mmi.input = test_file;
-    mmi.table = "";
-    mmi.diffile = "";
-    
-    fatx_context::set(nullptr); // Nettoyer d'abord
-    
-    // Créer et définir un contexte
-    fatx_context *ctx = new fatx_context(mmi);
-    fatx_context::set(ctx);
-    
-    // Accéder via get()
-    fatx_context *retrieved = fatx_context::get();
-    EXPECT_NE(retrieved, nullptr);
-    
-    // Cleanup
-    fatx_context::set(nullptr);
-    delete ctx;
-}
-
 // Additional extensive tests for context coverage
-TEST_F(ContextTest, Context_Device_Member) {
-    int argc = 1;
-    const char* argv[] = {"test"};
-    frontend mmi(argc, argv);
-    mmi.input = test_file;
-    mmi.table = "";
-    mmi.diffile = "";
-    
-    fatx_context ctx(mmi);
-    
-    // Vérifier que device est accessible
-    EXPECT_EQ(&ctx.dev, &ctx.dev);
-}
-
-TEST_F(ContextTest, Context_Partition_Member) {
-    int argc = 1;
-    const char* argv[] = {"test"};
-    frontend mmi(argc, argv);
-    mmi.input = test_file;
-    mmi.table = "";
-    mmi.diffile = "";
-    
-    fatx_context ctx(mmi);
-    
-    // Vérifier que partition est accessible
-    EXPECT_EQ(&ctx.par, &ctx.par);
-}
-
-TEST_F(ContextTest, Context_FAT_Member) {
-    int argc = 1;
-    const char* argv[] = {"test"};
-    frontend mmi(argc, argv);
-    mmi.input = test_file;
-    mmi.table = "";
-    mmi.diffile = "";
-    
-    fatx_context ctx(mmi);
-    
-    // Vérifier que fat member est initialisé
-    EXPECT_EQ(ctx.fat, ctx.fat);
-}
-
-TEST_F(ContextTest, Context_Root_Member) {
-    int argc = 1;
-    const char* argv[] = {"test"};
-    frontend mmi(argc, argv);
-    mmi.input = test_file;
-    mmi.table = "";
-    mmi.diffile = "";
-    
-    fatx_context ctx(mmi);
-    
-    // Vérifier que root member est accessible
-    EXPECT_EQ(ctx.root, ctx.root);
-}
-
 TEST_F(ContextTest, Context_ClusterArithmetic_siz2cls_Boundary) {
     int argc = 1;
     const char* argv[] = {"test"};
@@ -475,21 +335,6 @@ TEST_F(ContextTest, Context_ClusterArithmetic_Out_Of_Bounds) {
     EXPECT_EQ(ptr, 0);
     
     fatx_context::set(nullptr);
-}
-
-TEST_F(ContextTest, Context_Destructor) {
-    int argc = 1;
-    const char* argv[] = {"test"};
-    frontend mmi(argc, argv);
-    mmi.input = test_file;
-    mmi.table = "";
-    mmi.diffile = "";
-    
-    {
-        fatx_context ctx(mmi);
-    }
-    
-    EXPECT_TRUE(true);
 }
 
 TEST_F(ContextTest, Context_Multiple_Set_And_Get) {

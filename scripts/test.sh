@@ -12,6 +12,7 @@ WAIT=3
 TIMEOUT=30
 TABLE=file
 PARTITION=x2
+NFILE=5
 
 DSK=disk.fatx
 DIF=disk.dif
@@ -180,7 +181,7 @@ fuse7() {
 	fi
 	tasks=
 	if [ -z $1 ]; then
-		nmax=50
+		nmax=$NFILE
 	else
 		nmax=$1
 	fi

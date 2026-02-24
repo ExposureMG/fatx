@@ -411,13 +411,12 @@ int							dskmap::		resizefat(ptr_vareas o, clusptr s) {
 	if(o->nbcls() < s) {
 		// we need to extend the chain
 		vareas &&extend = allocfat(s - o->nbcls(), o->last() + 1);
-		res = !extend.empty();
-		if(res) {
-			authm.lock();
-			res = write(o->last(), extend.first());
-			o->add(extend);
-			authm.unlock();
-		}
+		if(extend.empty())
+			return ENOSPC;
+		authm.lock();
+		res = write(o->last(), extend.first());
+		o->add(extend);
+		authm.unlock();
 	}
 	else if(o->nbcls() > s) {
 		// we need to reduce the chain

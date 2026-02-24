@@ -1,5 +1,10 @@
 #include <gtest/gtest.h>
+#include <cstring>
+#include <unistd.h>
+#include <fstream>
+#include <stdexcept>
 #include "context.hpp"
+#include "../src/constants.hpp"
 
 class UtilsTest : public ::testing::Test {
 protected:
@@ -180,13 +185,6 @@ TEST_F(UtilsTest, Console_Write_Error_NoThrow) {
     EXPECT_NO_THROW(console::write("Error formatted: {}", true, 123));
 }
 
-// Test pour console::read (difficile à tester sans redirection d'entrée)
-TEST_F(UtilsTest, Console_Read_Exists) {
-    // Just verify the function exists and can be called
-    // In a real test environment, this would require input redirection
-    EXPECT_TRUE(true); // Placeholder - console::read exists
-}
-
 // Tests supplémentaires pour nameval
 TEST_F(UtilsTest, Nameval_EdgeCases) {
     EXPECT_EQ(nameval::is_valid("a.txt"), 0);
@@ -262,12 +260,6 @@ TEST_F(UtilsTest, StringConstants) {
     EXPECT_STREQ(mutex_entr, "Entry:");
 }
 
-// Tests pour les fonctions utilitaires diverses
-TEST_F(UtilsTest, Utility_Functions) {
-    // Test that various utility functions can be called
-    EXPECT_TRUE(true); // Placeholder for utility function tests
-}
-
 // Tests supplémentaires pour buffer
 TEST_F(UtilsTest, Buffer_OffsetVariations) {
     buffer buf1(0, 100);
@@ -334,3 +326,385 @@ TEST_F(UtilsTest, Area_LargeOffsets) {
     EXPECT_EQ(test_area.start, 0x7FFFFFFF);
     EXPECT_EQ(test_area.stop, 0x7FFFFFFF);
 }
+
+// Tests pour litend (little-endian byte_order)
+TEST_F(UtilsTest, Litend_TwoBytes) {
+    byte_order<2>::litend le(0x1234);
+    EXPECT_EQ(le(), 0x1234);
+    // Vérifier que les octets sont stockés en little-endian
+    EXPECT_EQ(static_cast<uint8_t>(le[0]), 0x34);
+    EXPECT_EQ(static_cast<uint8_t>(le[1]), 0x12);
+}
+
+TEST_F(UtilsTest, Litend_FourBytes) {
+    byte_order<4>::litend le(0xDEADBEEF);
+    EXPECT_EQ(le(), 0xDEADBEEF);
+    EXPECT_EQ(static_cast<uint8_t>(le[0]), 0xEF);
+    EXPECT_EQ(static_cast<uint8_t>(le[1]), 0xBE);
+    EXPECT_EQ(static_cast<uint8_t>(le[2]), 0xAD);
+    EXPECT_EQ(static_cast<uint8_t>(le[3]), 0xDE);
+}
+
+TEST_F(UtilsTest, Litend_EightBytes) {
+    byte_order<8>::litend le(0x0123456789ABCDEF);
+    EXPECT_EQ(le(), 0x0123456789ABCDEF);
+    EXPECT_EQ(static_cast<uint8_t>(le[0]), 0xEF);
+    EXPECT_EQ(static_cast<uint8_t>(le[7]), 0x01);
+}
+
+TEST_F(UtilsTest, Litend_OneByte) {
+    byte_order<1>::litend le(0xAB);
+    EXPECT_EQ(le(), 0xAB);
+}
+
+TEST_F(UtilsTest, Litend_Zero) {
+    byte_order<4>::litend le(0u);
+    EXPECT_EQ(le(), 0u);
+    for(size_t b = 0; b < 4; b++)
+        EXPECT_EQ(le[b], '\0');
+}
+
+TEST_F(UtilsTest, Litend_VsBigend_Differ) {
+    uint16_t val = 0x1234;
+    byte_order<2>::litend le(val);
+    byte_order<2>::bigend be(val);
+    // Both should round-trip to the same value
+    EXPECT_EQ(le(), val);
+    EXPECT_EQ(be(), val);
+    // But the stored bytes should differ
+    EXPECT_NE(static_cast<uint8_t>(le[0]), static_cast<uint8_t>(be[0]));
+}
+
+// Tests pour vareas::at()
+TEST_F(UtilsTest, Vareas_At_Zero_ReturnsLast) {
+    vareas va;
+    // area(offset, pointer, size, start, stop)
+    va.push_back(area(0, 0, 4096, 10, 15));
+    // at(0) should return last() = 15
+    EXPECT_EQ(va.at(0), 15u);
+}
+
+TEST_F(UtilsTest, Vareas_At_First_Cluster) {
+    vareas va;
+    va.push_back(area(0, 0, 4096, 10, 15));
+    // at(1) = start + 1 - 1 = 10
+    EXPECT_EQ(va.at(1), 10u);
+}
+
+TEST_F(UtilsTest, Vareas_At_Last_Cluster) {
+    vareas va;
+    va.push_back(area(0, 0, 4096, 10, 15));  // 6 clusters (10,11,12,13,14,15)
+    EXPECT_EQ(va.at(6), 15u);
+}
+
+TEST_F(UtilsTest, Vareas_At_Middle_Cluster) {
+    vareas va;
+    va.push_back(area(0, 0, 4096, 10, 15));
+    // at(3) = 10 + 3 - 1 = 12
+    EXPECT_EQ(va.at(3), 12u);
+}
+
+TEST_F(UtilsTest, Vareas_At_Spans_Two_Areas) {
+    vareas va;
+    va.push_back(area(0, 0, 2048, 10, 14));   // 5 clusters
+    va.push_back(area(2048, 2048, 2048, 20, 24)); // 5 clusters
+    // at(6) → first area has 5 clusters, s=6-5=1 in second area → 20+1-1=20
+    EXPECT_EQ(va.at(6), 20u);
+    // at(10) = 20 + 5 - 1 = 24
+    EXPECT_EQ(va.at(10), 24u);
+}
+
+TEST_F(UtilsTest, Vareas_At_OutOfRange) {
+    vareas va;
+    va.push_back(area(0, 0, 4096, 10, 15));  // 6 clusters
+    // at(7) → out of range → 0
+    EXPECT_EQ(va.at(7), 0u);
+}
+
+TEST_F(UtilsTest, Vareas_At_Empty) {
+    vareas va;
+    // at(0) on empty → last() = 0
+    EXPECT_EQ(va.at(0), 0u);
+    // at(1) on empty → 0
+    EXPECT_EQ(va.at(1), 0u);
+}
+
+// Tests pour vareas::in()
+TEST_F(UtilsTest, Vareas_In_Zero_ReturnsLast) {
+    vareas va;
+    va.push_back(area(0, 0, 2048, 10, 14));
+    va.push_back(area(2048, 2048, 2048, 20, 24));
+    // in(0) = end() - 1 = iterator to second area
+    auto it = va.in(0);
+    EXPECT_EQ(it->start, 20u);
+}
+
+TEST_F(UtilsTest, Vareas_In_FirstCluster) {
+    vareas va;
+    va.push_back(area(0, 0, 2048, 10, 14));   // 5 clusters
+    va.push_back(area(2048, 2048, 2048, 20, 24));
+    // in(1) → fits in first area (5 >= 1) → iterator to begin()
+    auto it = va.in(1);
+    EXPECT_EQ(it->start, 10u);
+}
+
+TEST_F(UtilsTest, Vareas_In_ExactFit) {
+    vareas va;
+    va.push_back(area(0, 0, 2048, 10, 14));   // 5 clusters
+    va.push_back(area(2048, 2048, 2048, 20, 24));
+    // in(5) → fits in first area (5 == 5) → begin()
+    auto it = va.in(5);
+    EXPECT_EQ(it->start, 10u);
+}
+
+TEST_F(UtilsTest, Vareas_In_Second_Area) {
+    vareas va;
+    va.push_back(area(0, 0, 2048, 10, 14));   // 5 clusters
+    va.push_back(area(2048, 2048, 2048, 20, 24));
+    // in(6) → first area has 5 → s=1 in second → begin()+1
+    auto it = va.in(6);
+    EXPECT_EQ(it->start, 20u);
+}
+
+TEST_F(UtilsTest, Vareas_In_OutOfRange) {
+    vareas va;
+    va.push_back(area(0, 0, 2048, 10, 14));   // 5 clusters
+    // in(6) > 5 clusters → end()
+    auto it = va.in(6);
+    EXPECT_EQ(it, va.end());
+}
+
+// Tests pour vareas::add(vareas)
+TEST_F(UtilsTest, Vareas_Add_EmptySource) {
+    vareas dest;
+    dest.push_back(area(0, 0, 4096, 10, 15));
+    vareas src;  // empty
+    dest.add(src);
+    EXPECT_EQ(dest.size(), 1u);
+    EXPECT_EQ(dest[0].start, 10u);
+}
+
+TEST_F(UtilsTest, Vareas_Add_IntoEmpty) {
+    vareas dest;  // empty
+    vareas src;
+    src.push_back(area(0, 0, 4096, 10, 15));
+    dest.add(src);
+    EXPECT_EQ(dest.size(), 1u);
+    EXPECT_EQ(dest[0].start, 10u);
+}
+
+TEST_F(UtilsTest, Vareas_Add_Adjacent_Merges) {
+    vareas dest;
+    dest.push_back(area(0, 0, 4096, 10, 15));  // stop=15
+    vareas src;
+    src.push_back(area(0, 4096, 4096, 16, 20));  // start=16 = last()+1
+    dest.add(src);
+    // Adjacent: last area gets extended, no new area added
+    EXPECT_EQ(dest.size(), 1u);
+    EXPECT_EQ(dest[0].stop, 20u);
+    EXPECT_EQ(dest[0].size, 4096u + 4096u);
+}
+
+TEST_F(UtilsTest, Vareas_Add_NonAdjacent_Appends) {
+    vareas dest;
+    dest.push_back(area(0, 0, 4096, 10, 15));  // stop=15
+    vareas src;
+    src.push_back(area(0, 0, 4096, 20, 25));   // start=20 != 16
+    dest.add(src);
+    EXPECT_EQ(dest.size(), 2u);
+    EXPECT_EQ(dest[0].start, 10u);
+    EXPECT_EQ(dest[1].start, 20u);
+    // Offset of src area recalculated from dest's last offset
+    EXPECT_EQ(dest[1].offset, dest[0].offset + dest[0].size);
+}
+
+TEST_F(UtilsTest, Vareas_Add_Adjacent_WithTrailing) {
+    vareas dest;
+    dest.push_back(area(0, 0, 4096, 10, 15));  // stop=15
+    vareas src;
+    src.push_back(area(0, 4096, 4096, 16, 20));  // adjacent → merged
+    src.push_back(area(4096, 8192, 4096, 25, 30));  // non-adjacent → appended
+    dest.add(src);
+    // First area of src merged, second gets offset recalculated
+    EXPECT_EQ(dest.size(), 2u);
+    EXPECT_EQ(dest[0].stop, 20u);
+    EXPECT_EQ(dest[1].start, 25u);
+    EXPECT_EQ(dest[1].offset, 4096u + 4096u);  // offset after merged first area
+}
+
+// =====================================================================
+// Tests pour mymutx : lock/unlock actifs quand prog=fuse && ready=true
+// =====================================================================
+
+class MymutxTest : public ::testing::Test {
+protected:
+	std::string   test_file;
+	frontend*     tf;
+	fatx_context* ctx;
+
+	void SetUp() override {
+		char tmpl[] = "/tmp/fatx_mymutx_XXXXXX";
+		int fd = mkstemp(tmpl);
+		if (fd == -1) throw std::runtime_error("mkstemp failed");
+		close(fd);
+		test_file = tmpl;
+
+		std::ofstream ofs(test_file, std::ios::binary | std::ios::out);
+		const std::size_t img_size = 0x400000; // 4MB
+		ofs.seekp(static_cast<std::streamoff>(img_size) - 1);
+		char z = '\0';
+		ofs.write(&z, 1);
+		ofs.seekp(0);
+		ofs.write("XTAF", 4);
+		uint32_t id = 0, spc = 1, root_cl = 1;
+		ofs.write(reinterpret_cast<char*>(&id),      4);
+		ofs.write(reinterpret_cast<char*>(&spc),     4);
+		ofs.write(reinterpret_cast<char*>(&root_cl), 4);
+		uint16_t eoc = 0xFFFF;
+		ofs.seekp(0x1000 + 2);
+		ofs.write(reinterpret_cast<char*>(&eoc), 2);
+		ofs.close();
+
+		int tac = 1;
+		const char* tav[] = {"test"};
+		tf  = new frontend(tac, tav);
+		ctx = new fatx_context(*tf);
+		fatx_context::set(ctx);
+		ctx->mmi.input   = test_file;
+		ctx->mmi.table   = "file";
+		ctx->mmi.prog    = frontend::fuse;
+		ctx->mmi.force_a = true;
+		ctx->mmi.force_y = true;
+
+		int res = ctx->setup();
+		ASSERT_EQ(res, 0);
+
+		// Activer ready=true pour que les mymutx exécutent vraiment le lock
+		ctx->ready = true;
+	}
+
+	void TearDown() override {
+		if (ctx) {
+			ctx->ready = false;
+			delete ctx;
+			ctx = nullptr;
+		}
+		delete tf;
+		if (!test_file.empty())
+			unlink(test_file.c_str());
+	}
+};
+
+// Couvre mymutx::lock() et mymutx::unlock() avec prog=fuse && ready=true
+TEST_F(MymutxTest, Mymutx_Lock_Unlock_Fuse_Ready) {
+	mymutx m("test_mutex");
+	// lock() : couvre le bloc conditionnel (prog==fuse && ready==true)
+	m.lock();
+	// unlock() : même branche
+	m.unlock();
+	EXPECT_TRUE(true);
+}
+
+// Couvre mymutx::lock_shared() et unlock_shared() avec prog=fuse && ready=true
+TEST_F(MymutxTest, Mymutx_LockShared_UnlockShared_Fuse_Ready) {
+	mymutx m("shared_mutex");
+	m.lock_shared();
+	m.unlock_shared();
+	EXPECT_TRUE(true);
+}
+
+// Couvre la branche no-op quand prog != fuse
+TEST_F(MymutxTest, Mymutx_NoOp_NonFuse) {
+	ctx->mmi.prog = frontend::fsck;
+	mymutx m("noop_mutex");
+	// Ces appels ne font rien (branche false)
+	m.lock();
+	m.unlock();
+	m.lock_shared();
+	m.unlock_shared();
+	EXPECT_TRUE(true);
+}
+
+// Couvre la branche no-op quand ready=false
+TEST_F(MymutxTest, Mymutx_NoOp_NotReady) {
+	ctx->ready = false;
+	mymutx m("notready_mutex");
+	m.lock();
+	m.unlock();
+	m.lock_shared();
+	m.unlock_shared();
+	ctx->ready = true;  // restaurer pour le TearDown
+	EXPECT_TRUE(true);
+}
+
+// Couvre vareas::add(clusptr) quand vareas est vide → return immédiat (ligne 115)
+TEST_F(MymutxTest, Vareas_AddClusPtr_EmptyReturn) {
+	vareas empty_areas;
+	// add() sur vide → early return (couvre ligne 115)
+	empty_areas.add(static_cast<clusptr>(5));
+	EXPECT_EQ(empty_areas.size(), 0u);
+}
+
+// Couvre vareas::add(clusptr) branche else (c+1 != first) → insert en tête (ligne 122)
+TEST_F(MymutxTest, Vareas_AddClusPtr_NotAdjacent) {
+	vareas areas;
+	filesize csz = ctx->par.clus_size;
+	// Une zone single cluster à cluster 5
+	area a1(0, clsarithm::cls2ptr(5), csz, 5, 5);
+	areas.push_back(a1);
+
+	// Ajouter cluster 3 (3+1=4 != 5) → else branch
+	areas.add(static_cast<clusptr>(3));
+	// La nouvelle zone est insérée en tête
+	EXPECT_EQ(areas.front().start, 3u);
+	EXPECT_EQ(areas.size(), 2u);
+}
+
+// Couvre la boucle for dans add(clusptr) avec 2+ areas (ligne 125)
+TEST_F(MymutxTest, Vareas_AddClusPtr_ForLoop) {
+	vareas areas;
+	filesize csz = ctx->par.clus_size;
+	// Deux zones non adjacentes
+	area a1(0,   clsarithm::cls2ptr(5), csz, 5, 5);
+	area a2(csz, clsarithm::cls2ptr(8), csz, 8, 8);
+	areas.push_back(a1);
+	areas.push_back(a2);
+
+	// Ajouter cluster 3 (not adjacent to first=5) → else branch
+	// puis la for-loop ajuste les pointeurs de a1 et a2
+	areas.add(static_cast<clusptr>(3));
+	EXPECT_EQ(areas.size(), 3u);  // 3 éléments : nouveau + a1 + a2
+	// Les pointeurs de a1 et a2 ont été décalés de csz
+	EXPECT_EQ(areas[1].pointer, clsarithm::cls2ptr(5) + csz);
+}
+
+// Couvre vareas::add(clusptr) branche if (c+1 == first) → fusion (lignes 117-119)
+TEST_F(MymutxTest, Vareas_AddClusPtr_Adjacent_Merge) {
+	vareas areas;
+	filesize csz = ctx->par.clus_size;
+	area a1(0, clsarithm::cls2ptr(4), csz, 4, 4);
+	areas.push_back(a1);
+
+	// Ajouter cluster 3 (3+1=4 == first()) → if branch
+	areas.add(static_cast<clusptr>(3));
+	EXPECT_EQ(areas.front().start, 3u);  // start étendu à 3
+	EXPECT_EQ(areas.size(), 1u);          // toujours 1 seule zone
+}
+
+// Couvre mymutx::name() en appelant directement le setter
+TEST_F(MymutxTest, Mymutx_Name_Setter) {
+	mymutx m("initial");
+	m.name("new_name");
+	EXPECT_TRUE(true);  // juste vérifier que ça ne crashe pas
+}
+
+// Tests des constantes de code d'erreur
+TEST(FatxBasicTest, ErrorCodes) {
+	EXPECT_EQ(code_noerr, 0);
+	EXPECT_EQ(code_corrd, 1<<0);
+	EXPECT_EQ(code_ncorr, 1<<2);
+	EXPECT_EQ(code_operr, 1<<3);
+	EXPECT_EQ(code_usage, 1<<4);
+}
+
+

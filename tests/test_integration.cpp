@@ -112,19 +112,6 @@ TEST_F(FATXIntegrationTest, LABEL_Get_Volume_Label) {
     EXPECT_TRUE(true);
 }
 
-// Test 5: label.fatx - Set new label
-TEST_F(FATXIntegrationTest, LABEL_Set_New_Label) {
-    // Format
-    std::string mkfs_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as mkfs --force-y --table file --partition x2 ") + temp_disk_path;
-    run_command(mkfs_cmd);
-    
-    // Set label
-    std::string label_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as label --set NewLabel --force-y --table file --partition x2 ") + temp_disk_path;
-    run_command(label_cmd);
-    
-    EXPECT_TRUE(true);
-}
-
 // Test 6: unrm.fatx - Undelete recovery (on fresh format)
 TEST_F(FATXIntegrationTest, UNRM_List_Deleted_Files) {
     // Format
@@ -170,48 +157,6 @@ TEST_F(FATXIntegrationTest, Partition_X2_Detection) {
     EXPECT_TRUE(true);
 }
 
-// Test 9: Partition detection - X3
-TEST_F(FATXIntegrationTest, Partition_X3_Detection) {
-    // Format with x3
-    std::string mkfs_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as mkfs --force-y --table file --partition x3 ") + temp_disk_path;
-    run_command(mkfs_cmd);
-    
-    // fsck should detect partition correctly
-    std::string fsck_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as fsck --table file --partition x3 ") + temp_disk_path;
-    run_command(fsck_cmd);
-    
-    EXPECT_TRUE(true);
-}
-
-// Test 10: DiskMap - Cluster chain traversal
-TEST_F(FATXIntegrationTest, DiskMap_Cluster_Chain_Traversal) {
-    // Format filesystem
-    std::string mkfs_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as mkfs --force-y --table file --partition x2 ") + temp_disk_path;
-    run_command(mkfs_cmd);
-    
-    // fsck will traverse cluster chains
-    std::string fsck_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as fsck --verbose --table file --partition x2 ") + temp_disk_path;
-    run_command(fsck_cmd);
-    
-    EXPECT_TRUE(true);
-}
-
-// Test 11: Frontend CLI - Verbose mode
-TEST_F(FATXIntegrationTest, Frontend_Verbose_Output) {
-    std::string mkfs_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as mkfs --verbose --force-y --table file --partition x2 ") + temp_disk_path;
-    run_command(mkfs_cmd);
-    
-    EXPECT_TRUE(true);
-}
-
-// Test 12: Frontend CLI - Force yes flag
-TEST_F(FATXIntegrationTest, Frontend_Force_Yes) {
-    std::string mkfs_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as mkfs --force-y --table file --partition x2 ") + temp_disk_path;
-    run_command(mkfs_cmd);
-    
-    EXPECT_TRUE(true);
-}
-
 // Test 13: Error handling - Invalid partition type
 TEST_F(FATXIntegrationTest, Error_Invalid_Partition_Type) {
     std::string cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as mkfs --table file --partition invalid ") + temp_disk_path;
@@ -229,56 +174,6 @@ TEST_F(FATXIntegrationTest, Error_Nonexistent_File) {
     // Should not crash - error handled gracefully
     EXPECT_TRUE(true);
 }
-
-// Test 15: Frontend - Help option
-TEST_F(FATXIntegrationTest, Frontend_Help_Option) {
-    std::string cmd = "cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --help";
-    run_command(cmd);
-    
-    // Help should produce output
-    EXPECT_TRUE(true);
-}
-
-// Test 16: ByteOrder utilities - 32-bit little endian
-TEST_F(FATXIntegrationTest, ByteOrder_32bit_Conversion) {
-    unsigned char buffer[4] = {0x01, 0x02, 0x03, 0x04};
-    uint32_t value = byte_order<4>::bigend(reinterpret_cast<const char*>(buffer))();
-    EXPECT_TRUE(value > 0);
-}
-
-// Test 17: ByteOrder utilities - 16-bit little endian
-TEST_F(FATXIntegrationTest, ByteOrder_16bit_Conversion) {
-    unsigned char buffer[2] = {0x01, 0x02};
-    uint16_t value = byte_order<2>::bigend(reinterpret_cast<const char*>(buffer))();
-    EXPECT_TRUE(value > 0);
-}
-
-// Test 18: ByteOrder utilities - Verification
-TEST_F(FATXIntegrationTest, ByteOrder_Verification) {
-    // Verify byte order conversions
-    unsigned char test[4] = {0x01, 0x02, 0x03, 0x04};
-    uint32_t val = byte_order<4>::bigend(reinterpret_cast<const char*>(test))();
-    // Should be little endian conversion
-    EXPECT_TRUE(val > 0);
-}
-
-// Test 19: Full workflow - Format, Check, Label
-TEST_F(FATXIntegrationTest, Full_Workflow_Format_Check_Label) {
-    // Step 1: Format
-    std::string mkfs_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as mkfs --force-y --table file --partition x2 ") + temp_disk_path;
-    run_command(mkfs_cmd);
-    
-    // Step 2: Check filesystem
-    std::string fsck_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as fsck --table file --partition x2 ") + temp_disk_path;
-    run_command(fsck_cmd);
-    
-    // Step 3: Get label
-    std::string label_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as label --table file --partition x2 ") + temp_disk_path;
-    run_command(label_cmd);
-    
-    EXPECT_TRUE(true);
-}
-
 // Test 20: Full workflow with recovery mode
 TEST_F(FATXIntegrationTest, Full_Workflow_With_Recovery) {
     // Format
@@ -289,5 +184,66 @@ TEST_F(FATXIntegrationTest, Full_Workflow_With_Recovery) {
     std::string unrm_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as unrm --recover --table file --partition x2 ") + temp_disk_path;
     run_command(unrm_cmd);
     
+    EXPECT_TRUE(true);
+}
+
+// Test 21: Couvre fatx.cpp L119-120 (fuse_debug block) et L235 (err != 0 → recalcul code retour)
+// --debug active fuse_debug=true → vp.push_back("-d") + fuse_argv (L119-120)
+// Le montage échoue (point de montage inexistant) → err != 0 → L235 exécuté
+TEST_F(FATXIntegrationTest, Fatx_Fuse_Debug_Flag) {
+    // Créer un système de fichiers FATX valide pour que setup() réussisse
+    std::string mkfs_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as mkfs --yes --table file --partition x2 ") + temp_disk_path + " 2>/dev/null";
+    run_command(mkfs_cmd);
+    // Lancer fuse avec --debug : couvre L118-120 (fuse_debug=true → ajoute "-d")
+    // Le point de montage n'existe pas → fuse_main échoue → err != 0 → L235 couvert
+    std::string fuse_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as fuse --debug --table file --partition x2 ") + temp_disk_path + " /tmp/fatx_mnt_debug_NONEXIST/ 2>/dev/null";
+    run_command(fuse_cmd);
+    EXPECT_TRUE(true);
+}
+
+// Test 22: Couvre fatx.cpp L127-128 (fuse_singlethr block)
+// --singlethr active fuse_singlethr=true → vp.push_back("-s") + fuse_argv (L127-128)
+TEST_F(FATXIntegrationTest, Fatx_Fuse_Singlethr_Flag) {
+    std::string mkfs_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as mkfs --yes --table file --partition x2 ") + temp_disk_path + " 2>/dev/null";
+    run_command(mkfs_cmd);
+    std::string fuse_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as fuse --singlethr --table file --partition x2 ") + temp_disk_path + " /tmp/fatx_mnt_sglt_NONEXIST/ 2>/dev/null";
+    run_command(fuse_cmd);
+    EXPECT_TRUE(true);
+}
+
+// Test 23: Couvre fatx.cpp L131-133 (fuse_option block)
+// --option allow_other (≠ "ro") → fuse_option="allow_other" → non-vide → L130-133 exécutés
+TEST_F(FATXIntegrationTest, Fatx_Fuse_Custom_Option) {
+    std::string mkfs_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as mkfs --yes --table file --partition x2 ") + temp_disk_path + " 2>/dev/null";
+    run_command(mkfs_cmd);
+    std::string fuse_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as fuse --option allow_other --table file --partition x2 ") + temp_disk_path + " /tmp/fatx_mnt_opt_NONEXIST/ 2>/dev/null";
+    run_command(fuse_cmd);
+    EXPECT_TRUE(true);
+}
+
+// Test 24: Couvre fatx.cpp L136-138 (corps de la boucle unkopt pour args inconnus)
+// Les options inconnues vont dans unkopt (allow_unregistered en mode fuse)
+// → for(i: unkopt) { if(fuse_argc < 19) { push, fuse_argc++ } } → L136-138 exécutés
+TEST_F(FATXIntegrationTest, Fatx_Fuse_Unknown_Args) {
+    std::string mkfs_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as mkfs --yes --table file --partition x2 ") + temp_disk_path + " 2>/dev/null";
+    run_command(mkfs_cmd);
+    // --xyzzy1 et --xyzzy2 sont des options inconnues → vont dans unkopt → couvre L136-138
+    std::string fuse_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as fuse --xyzzy1 --xyzzy2 --table file --partition x2 ") + temp_disk_path + " /tmp/fatx_mnt_unk_NONEXIST/ 2>/dev/null";
+    run_command(fuse_cmd);
+    EXPECT_TRUE(true);
+}
+
+// Test 25: Couvre fatx.cpp L141-142 (garde anti-débordement de unkopt)
+// fuse_argc commence à 2 (progname + mountpoint) ; 18 options inconnues → fuse_argc=19 à la 17e
+// La 18e option voit fuse_argc=19 >= max_fuse_args-1=19 → else { console::write("Too many..."); break; }
+TEST_F(FATXIntegrationTest, Fatx_Fuse_TooMany_Unknown_Args) {
+    std::string mkfs_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as mkfs --yes --table file --partition x2 ") + temp_disk_path + " 2>/dev/null";
+    run_command(mkfs_cmd);
+    // Construire 18 options inconnues pour dépasser la limite max_fuse_args-1=19
+    std::string many_unknowns;
+    for (int i = 0; i < 18; i++)
+        many_unknowns += " --unk" + std::to_string(i);
+    std::string fuse_cmd = std::string("cd /home/baxter/Documents/dev/fatx/fatx.git && ./build/fatx --as fuse --table file --partition x2") + many_unknowns + " " + std::string(temp_disk_path) + " /tmp/fatx_mnt_over_NONEXIST/ 2>/dev/null";
+    run_command(fuse_cmd);
     EXPECT_TRUE(true);
 }

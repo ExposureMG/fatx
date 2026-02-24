@@ -79,4 +79,5 @@ class								frontend {
         void							parser();
         bool							getanswer(bool = false);
         bool							writeable() const { return !readonly; }
+        void							set_readonly(bool v) { readonly = v; }
     };

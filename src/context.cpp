@@ -46,15 +46,11 @@ int							fatx_context::	setup() {
 		fat = new memmap(par);
 	else
 		fat = new dskmap(par);
-	if(fat == nullptr)
-		return ENOMEM;
 	#if !defined NDEBUG && defined DBG_INIT
 		dbglog("::EOMAP");
 	#endif
 	if(mmi.prog != frontend::mkfs) {
 		root = new entry();
-		if(root == nullptr)
-			return ENOMEM;
 		if(mmi.prog == frontend::fuse && ready) {
 			console::write("Errors found, please run fsck.fatx to correct.\n", mmi.dialog);
 			return ECANCELED;

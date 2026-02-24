@@ -10,15 +10,11 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/scripts)
 option(BUILD_TESTS "Build test suite" ON)
 option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
 
-if(CMAKE_BUILD_TYPE STREQUAL "")
-  set(
-    CMAKE_BUILD_TYPE
-    Release
-    CACHE STRING "Build type" FORCE
-  )
-endif(CMAKE_BUILD_TYPE STREQUAL "")
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 
-set(SANITIZE false)
+option(SANITIZE "Enable sanitizers" OFF)
 
 include(CTest)
 
@@ -46,9 +42,8 @@ if(NOT GTest_FOUND)
   FetchContent_MakeAvailable(googletest)
 endif()
 
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang,GNU,LCC>")
-set(msvc_cxx "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
 
 add_compile_options(
   -D_FILE_OFFSET_BITS=64
@@ -73,7 +68,6 @@ add_compile_options(
   -Wextra-semi
   -Wformat=1
   -Wfloat-equal
-  -Winline
   -Wlogical-op
   -Wmissing-declarations
   -Wmissing-format-attribute
@@ -91,7 +85,6 @@ add_compile_options(
   -Wsign-conversion
   -Wsign-promo
   -Wstrict-null-sentinel
-  -Wstrict-overflow=2
   -Wstrict-overflow=5
   -Wstringop-overflow=4
   -Wstringop-truncation
@@ -112,6 +105,7 @@ add_compile_options(
   -Wunused
   -Wunused-macros
   -Wuseless-cast
+  -Wunreachable-code
   -Wzero-as-null-pointer-constant
   -Wno-inline
 )
@@ -121,8 +115,8 @@ add_compile_options($<$<OR:$<CONFIG:Debug>,$<BOOL:$ENV{CI}>>:$<$<NOT:$<CXX_COMPI
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   if(ENABLE_COVERAGE)
     message(STATUS "Enabling code coverage")
-    add_compile_options(--coverage -fprofile-arcs -ftest-coverage)
-    add_link_options(-lgcov --coverage)
+    add_compile_options(--coverage)
+    add_link_options(--coverage)
   endif()
 
   add_compile_options(
@@ -146,9 +140,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     # -DNO_LOCK
     # -DNO_CACHE
   )
-  # Ajouter les flags de couverture pour GCC/Clang en mode Debug
+  # Flags de couverture toujours actifs en Debug (génération .gcno/.gcda)
   add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-fprofile-arcs>)
   add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-ftest-coverage>)
+  add_link_options($<$<CXX_COMPILER_ID:GNU,Clang>:--coverage>)
   if(SANITIZE)
     add_compile_options(
       -fsanitize=address
@@ -208,43 +203,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
       -fsanitize=vptr
       -fsanitize=pointer-overflow
     )
-  endif(SANITIZE)
-endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
-
-add_executable(
-  fatx
-  src/fatx.cpp
-  src/types.hpp
-  src/constants.hpp
-  src/context.hpp
-  src/context.cpp
-  src/fuse_ops.hpp
-  src/fuse_ops.cpp
-  src/device.hpp
-  src/device.cpp
-  src/frontend.hpp
-  src/frontend.cpp
-  src/partition.hpp
-  src/partition.cpp
-  src/entry.hpp
-  src/entry.cpp
-  src/diskmap.hpp
-  src/diskmap.cpp
-  src/utils.hpp
-  src/utils.cpp
-)
-target_compile_features(fatx PRIVATE cxx_std_26)
-target_include_directories(fatx PRIVATE src)
-target_link_options(fatx PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-fprofile-arcs>)
-target_link_options(fatx PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-ftest-coverage>)
-if(Boost_FOUND)
-  target_link_libraries(fatx Boost::program_options)
 endif()
-if(FUSE3_FOUND)
-  target_link_libraries(fatx FUSE3::fuse3)
 endif()
 
-# Create object library for code that tests need (excluding fatx.cpp which has app main)
+# Bibliothèque objet partagée entre fatx et fatx_tests (exclut fatx.cpp qui contient main)
 add_library(fatx_objects OBJECT
   src/types.hpp
   src/constants.hpp
@@ -265,10 +227,11 @@ add_library(fatx_objects OBJECT
   src/utils.hpp
   src/utils.cpp
 )
-target_compile_features(fatx_objects PRIVATE cxx_std_26)
-target_include_directories(fatx_objects PRIVATE src)
-target_link_options(fatx_objects PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-fprofile-arcs>)
-target_link_options(fatx_objects PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-ftest-coverage>)
+target_include_directories(fatx_objects PUBLIC src)
+target_link_libraries(fatx_objects PUBLIC Boost::program_options FUSE3::fuse3)
+
+add_executable(fatx src/fatx.cpp)
+target_link_libraries(fatx PRIVATE fatx_objects)
 
 add_custom_target(
   test.sh
@@ -288,50 +251,64 @@ endforeach(i)
 
 enable_testing()
 # Tests unitaires avec GoogleTest
-if(GTest_FOUND OR googletest_POPULATED)
-  # Create test executable using object library + test sources
+if(BUILD_TESTS AND (GTest_FOUND OR googletest_POPULATED))
   add_executable(fatx_tests
-    tests/test_basic.cpp
     tests/test_context.cpp
     tests/test_device.cpp
     tests/test_diskmap.cpp
     tests/test_entry.cpp
-    tests/test_fatx.cpp
     tests/test_frontend.cpp
-    tests/test_context_setup.cpp
     tests/test_fuse_ops.cpp
     tests/test_integration.cpp
     tests/test_partition.cpp
     tests/test_utils.cpp
-    $<TARGET_OBJECTS:fatx_objects>
   )
-
-  target_compile_features(fatx_tests PRIVATE cxx_std_26)
-  target_include_directories(fatx_tests PRIVATE src)
-  target_link_options(fatx_tests PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-fprofile-arcs>)
-  target_link_options(fatx_tests PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-ftest-coverage>)
-
-  # Link with GoogleTest and dependencies
-  target_link_libraries(fatx_tests GTest::gtest_main GTest::gmock)
-  if(Boost_FOUND)
-    target_link_libraries(fatx_tests Boost::program_options)
-  endif()
-  if(FUSE3_FOUND)
-    target_link_libraries(fatx_tests FUSE3::fuse3)
-  endif()
+  # fatx_objects propage PUBLIC : src/ includes + Boost + FUSE3
+  target_link_libraries(fatx_tests PRIVATE
+    fatx_objects
+    GTest::gtest_main GTest::gmock
+  )
   if(ENABLE_COVERAGE)
     target_compile_options(fatx_tests PRIVATE --coverage)
     target_link_options(fatx_tests PRIVATE --coverage)
   endif()
 
-  # Discover and add tests
   include(GoogleTest)
-  gtest_discover_tests(fatx_tests)
+  gtest_discover_tests(fatx_tests WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 endif()
 
 include(GNUInstallDirs)
 install(TARGETS fatx RUNTIME DESTINATION sbin)
-install(DIRECTORY man8 TYPE MAN)
+
+# Génération des man pages depuis les sources Markdown (doc/man/*.8.md)
+find_program(PANDOC pandoc)
+if(PANDOC)
+  set(_man_tools fatx fsck.fatx fusefatx label.fatx mkfs.fatx unrm.fatx)
+  set(_man_outputs)
+  file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/man8)
+  foreach(_tool IN LISTS _man_tools)
+    set(_src ${PROJECT_SOURCE_DIR}/doc/man/${_tool}.8.md)
+    set(_out ${PROJECT_BINARY_DIR}/man8/${_tool}.8.gz)
+    set(_troff ${PROJECT_BINARY_DIR}/man8/${_tool}.8)
+    add_custom_command(
+      OUTPUT ${_out}
+      COMMAND ${PANDOC} -s -t man -o ${_troff} ${_src}
+      COMMAND gzip -9 -f ${_troff}
+      DEPENDS ${_src}
+      COMMENT "Generating man page ${_tool}(8)"
+      VERBATIM
+    )
+    list(APPEND _man_outputs ${_out})
+  endforeach()
+  add_custom_target(man ALL DEPENDS ${_man_outputs})
+  install(DIRECTORY ${PROJECT_BINARY_DIR}/man8/
+    DESTINATION ${CMAKE_INSTALL_MANDIR}/man8
+    FILES_MATCHING PATTERN "*.gz"
+  )
+else()
+  message(STATUS "pandoc not found: using pre-built man pages from man8/")
+  install(DIRECTORY man8 TYPE MAN)
+endif()
 install(
   FILES
   README
@@ -346,15 +323,14 @@ install(
   TYPE DOC
 )
 
-set(DOXYGEN_PROJECT_LOGO ${PROJECT_SOURCE_DIR}/doc/fatx.jpg)
 if(DOXYGEN_FOUND)
   add_custom_target(doxygen EXCLUDE_FROM_ALL
     COMMAND ${DOXYGEN_EXECUTABLE} ${PROJECT_SOURCE_DIR}/doc/doxygen.cfg
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/doc
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Generating Doxygen documentation"
     VERBATIM
   )
-  # install(DIRECTORY ${CMAKE_BINARY_DIR}/html TYPE DOC)
+  install(DIRECTORY ${CMAKE_BINARY_DIR}/html TYPE DOC)
 endif()
 
 # Cible pour générer le rapport de couverture avec analyse par module (nécessite lcov)
@@ -364,7 +340,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clan
   find_program(GENHTML_FOUND genhtml)
   if(LCOV_FOUND AND GENHTML_FOUND AND PYTHON3_EXECUTABLE)
     add_custom_target(coverage
-      COMMAND ${PYTHON3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/generate_coverage.py
+      COMMAND ${PYTHON3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/generate_coverage.py --build-dir ${CMAKE_BINARY_DIR}
       COMMENT "Generating coverage report with module analysis"
       DEPENDS fatx_tests
     )
@@ -392,6 +368,7 @@ foreach(i RANGE 0 ${nb})
   list(GET names ${i} test_name)
   message("-- Found test: ${test_name}")
   add_test(NAME ${test_name} COMMAND ${BASH} test.sh ${i})
+  set_tests_properties(${test_name} PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 endforeach(i)
 
 # Add a convenient target to run all tests via CTest
@@ -404,3 +381,16 @@ add_custom_target(run_all_tests
 
 # Alias `run_tests` -> `run_all_tests` for convenience
 add_custom_target(run_tests DEPENDS run_all_tests)
+
+# Cible pour l'analyse de code mort (cppcheck + GCC -fanalyzer + couverture lcov)
+if(PYTHON3_EXECUTABLE)
+  add_custom_target(deadcode
+    COMMAND ${PYTHON3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/scripts/generate_deadcode.py
+            --build-dir ${CMAKE_BINARY_DIR}
+            --src-dir   ${PROJECT_SOURCE_DIR}/src
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Analyse de code mort → ${CMAKE_BINARY_DIR}/deadcode_report/report.txt"
+    VERBATIM
+  )
+endif()

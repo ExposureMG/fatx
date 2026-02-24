@@ -1,10 +1,11 @@
 # Build directories
-build/
+build*/
 bin/
 out/
+lost+found/
 
 # Infos
-*.md
+/*.md
 
 # VS Code configuration
 .vscode/

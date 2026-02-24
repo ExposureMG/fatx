@@ -9,13 +9,35 @@ import re
 from pathlib import Path
 from typing import Dict, Tuple
 
-def run_command(cmd, cwd=None, capture=False):
-    """Run a shell command."""
+def run_command(cmd, cwd=None, capture=False, filter_output=None):
+    """Run a shell command.
+
+    filter_output: list of substrings — lines containing any of them are
+    suppressed from both stdout and stderr.
+    """
     try:
-        if capture:
-            result = subprocess.run(cmd, shell=True, cwd=cwd, 
+        if capture or filter_output:
+            result = subprocess.run(cmd, shell=True, cwd=cwd,
                                   capture_output=True, text=True, check=False)
-            return result.returncode, result.stdout, result.stderr
+            if filter_output:
+                for stream, dest in ((result.stdout, sys.stdout), (result.stderr, sys.stderr)):
+                    if not stream:
+                        continue
+                    filtered = "\n".join(
+                        line for line in stream.splitlines()
+                        if not any(pat in line for pat in filter_output)
+                    )
+                    if filtered.strip():
+                        print(filtered, file=dest)
+            elif not capture:
+                # no filtering but capture was False — print normally
+                if result.stdout:
+                    print(result.stdout, end="")
+                if result.stderr:
+                    print(result.stderr, end="", file=sys.stderr)
+            if capture:
+                return result.returncode, result.stdout, result.stderr
+            return result.returncode, result.stdout, ""
         else:
             result = subprocess.run(cmd, shell=True, cwd=cwd, check=False)
             return result.returncode, "", ""
@@ -115,8 +137,17 @@ def print_coverage_report(stats: Dict[str, Tuple[int, int, float]]):
 
 def main():
     """Main function."""
-    build_dir = Path(__file__).parent.parent / "build"
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate coverage report")
+    parser.add_argument("--build-dir", default=None,
+                        help="Build directory (default: <project>/build)")
+    args = parser.parse_args()
+
     project_dir = Path(__file__).parent.parent
+    if args.build_dir:
+        build_dir = Path(args.build_dir)
+    else:
+        build_dir = project_dir / "build"
     
     if not build_dir.exists():
         print(f"Build directory not found: {build_dir}")
@@ -164,8 +195,10 @@ def main():
     # Generate coverage data
     print("2. Capturing coverage data with lcov...")
     # Use current directory (.) instead of build_dir to capture all gcda files properly
-    rc, _, _ = run_command(f"lcov --capture --directory . --output-file {build_dir}/coverage_final.info --ignore-errors inconsistent,inconsistent --no-external", 
-                          cwd=str(project_dir))
+    # --ignore-errors path: ignore missing .gcno files (e.g. from non-test binaries)
+    rc, _, _ = run_command(f"lcov --capture --directory . --output-file {build_dir}/coverage_final.info --ignore-errors inconsistent,inconsistent,path --no-external",
+                          cwd=str(project_dir),
+                          filter_output=["Dropping ", "dropping ", "ignoring data for external"])
     if rc != 0:
         print("   Warning: lcov capture had issues (continuing...)")
     else:
@@ -174,8 +207,9 @@ def main():
     # Generate HTML report
     print("3. Generating HTML report...")
     report_dir = build_dir / "coverage_final_report"
-    rc, _, _ = run_command(f"genhtml {build_dir}/coverage_final.info --output-directory {report_dir} --ignore-errors inconsistent,inconsistent", 
-                          cwd=str(project_dir))
+    rc, _, _ = run_command(f"genhtml {build_dir}/coverage_final.info --output-directory {report_dir} --ignore-errors inconsistent,inconsistent",
+                          cwd=str(project_dir),
+                          filter_output=["Dropping ", "dropping ", "ignoring data for external"])
     if rc == 0:
         print(f"   ✓ HTML report generated at: {report_dir}/index.html")
     
