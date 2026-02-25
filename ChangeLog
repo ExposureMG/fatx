@@ -1,11 +1,11 @@
 fatx (1.18) unstable; urgency=low
-  Corrected bad FAT allocations in case of file creation failed
-  Corrected adding entry failed if entry exists in bad state
-  Corrected bad overwriting of file
-  Moved to stdlib shared_mutex
-  Moved to last version of libfuse API
+  Production moved to CMake with C++26 and stricter compiler options
+  Added extensive unit and integration tests with improved module coverage
+  Added full QA pipeline (coverage, dead code, sanitize, memcheck, helgrind, drd)
+  Improved valgrind/sanitizer reporting and parallel test execution helpers
+  Updated and aligned manpages/documentation with current CLI options and tooling
 
- -- Christophe Duverger <fatx@christopheduverger.fr> Fri, 29 March 2024 18:52:02 +0100
+ -- Christophe Duverger <fatx@christopheduverger.fr> Wed, 25 Feb 2026 12:10:51 +0100
 
 fatx (1.17) unstable; urgency=low
   USB drive correctly handled
