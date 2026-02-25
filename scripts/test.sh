@@ -20,12 +20,15 @@ DSK=disk.${TSUF}.fatx
 DIF=disk.${TSUF}.dif
 MNT=mnt.fatx.${TSUF}
 FUSE=
+FUSELOG=fuse.${TSUF}.log
 
 prepare() {
 	echo Prepare context
 	[ -d $MNT ] && fusermount -u $MNT 2>/dev/null
 	rm -f "$DSK" "$DIF"
+	rm -f "$FUSELOG"
 	[ -d $MNT ] || mkdir $MNT
+	chmod 0777 "$MNT" 2>/dev/null || true
 #	[ -e $DSK ] || dd if=<(yes $'\xFF' | tr -d "\n") of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
 	[ -e $DSK ] || dd if=/dev/urandom of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
 	REF=$(basename $DSK).ref
@@ -37,13 +40,13 @@ prefuse() {
 	if ! [ -c /dev/fuse ]; then
 		exit 77
 	fi
-	$FATX --as fuse -f ${DISK[@]} $MNT/ $1 &
+	$FATX --as fuse -f ${DISK[@]} $MNT/ $1 </dev/null >"$FUSELOG" 2>&1 &
 	FUSE=$!
 	count=0
 	while ! `df $MNT | grep -q fatx`; do
 		sleep 1
 		let count++
-		if [ "$1" == "" -a $((count)) == $TIMEOUT ]; then
+		if [ $((count)) == $TIMEOUT ]; then
 			echo Failed to mount disk
 			kilfuse
 			close
@@ -52,17 +55,25 @@ prefuse() {
 	done
 }
 remfuse() {
-	fusermount -u $MNT
 	count=0
-	while `df $MNT | tail -n1 | cut -f 1 -d\  | grep -q fatx`; do
+	while grep -qs " $MNT " /proc/mounts; do
+		fusermount -u "$MNT" 2>/dev/null || true
 		sleep 1
 		let count++
 		if [ $((count)) == $TIMEOUT ]; then
-			echo Failed to unmount disk
-			kilfuse
-			exit 1
+			fusermount -uz "$MNT" 2>/dev/null || true
+			sleep 1
+			if grep -qs " $MNT " /proc/mounts; then
+				echo Failed to unmount disk
+				kilfuse
+				exit 1
+			fi
 		fi
 	done
+	if [ -n "$FUSE" ]; then
+		kill "$FUSE" 2>/dev/null || true
+		wait "$FUSE" 2>/dev/null || true
+	fi
 	FUSE=
 }
 kilfuse() {
@@ -76,6 +87,7 @@ close() {
 	[ -e $DSK ] && rm $DSK
 	[ -z $DIF ] || ([ -e $DIF ] && rm $DIF)
 	[ -z $REF ] || ([ -e $REF ] && rm $REF)
+	[ -e $FUSELOG ] && rm $FUSELOG
 	echo -n
 }
 
@@ -260,14 +272,26 @@ fuse8() {
 	fi
 	remfuse
 }
+wait_recovered_file() {
+	local src=$1 dst=$2
+	local count=0
+	while ! (test -e "$dst" && cmp -b "$src" "$dst" >/dev/null 2>&1); do
+		sleep 1
+		let count++
+		if [ $count -eq $TIMEOUT ]; then
+			return 1
+		fi
+	done
+	return 0
+}
 fuse9() {
 	echo Fuse: recover mode:
 	prefuse
 	cp $FBIN $MNT/tbff
 	rm $MNT/tbff
 	remfuse
-	prefuse -r
-	test -e $MNT/tbff && cmp -b $FBIN $MNT/tbff
+	prefuse -R
+	wait_recovered_file "$FBIN" "$MNT/tbff"
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else
@@ -441,7 +465,7 @@ unrm1() {
 		exit 1
 	fi
 	prefuse
-	test -e $MNT/tbff && cmp -b $FATX $MNT/tbff
+	wait_recovered_file "$FBIN" "$MNT/tbff"
 	if [ $? == 0 ]; then
 		echo "*** Test OK"
 	else

@@ -205,7 +205,7 @@ int							frontend::		setup() {
 	if(prog == fuse) {
 		visible.add_options()
 			("mount,m", boost::program_options::value<std::string>(), "set mountpoint")
-			("recover,r", "mount with deleted files")
+			("recover,R", "mount with deleted files")
 			("option,o", boost::program_options::value<std::string>(), "mount options")
 			("cutname,c", "enable use of long names")
 			("debug,d", "enable debug output (implies -f)")

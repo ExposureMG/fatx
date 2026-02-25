@@ -99,7 +99,7 @@ option) with deleted files and directories visible.
 
     **x2** — for data partition
 
-**-r**, **--recover**
+**-R**, **--recover**
 :   Mount the filesystem with the deleted files visible. This option implies the
     **-t** option: the filesystem is opened read only.
 
@@ -124,11 +124,11 @@ option) with deleted files and directories visible.
 
 **--nodate**
 :   Disable dates precedence of deleted files in the recovery algorithm. This
-    option is only valid in conjunction with the **-r** option.
+    option is only valid in conjunction with the **-R** option.
 
 **--nolost**
 :   Disable preservation of lost chains in the recovery algorithm. This option is
-    only valid in conjunction with the **-r** option.
+    only valid in conjunction with the **-R** option.
 
 **--offset** *offset*
 :   Force *offset* of the partition in the device. This option disables the
