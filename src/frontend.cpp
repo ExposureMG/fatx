@@ -374,7 +374,7 @@ int							frontend::		setup() {
 		}
 	}
 	if(varmap.count("version")) {
-		console::write("{} v{}.\nCopyright (C) 2012 - 2023 Christophe Duverger.\n\n",
+		console::write("{} v{}.\nCopyright (C) 2012 - 2026 Christophe Duverger.\n\n",
 			name(),
 			PACKAGE_VERSION
 		);
