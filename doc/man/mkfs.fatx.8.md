@@ -15,6 +15,7 @@ mkfs.fatx - creates an Xbox 360 FATX filesystem
   [**--diff** *diff-file*]
   [**--offset** *offset*]
   [**--size** *size*]
+    [**--version**]
   [**-b** | **--table** **file**|**mu**|**hd**|**kit**]
   [**-p** | **--partition** **sc**|**gc**|**se1**|**se2**|**xdv**|**x1**|**x2**]
   [**-l** | **--label** *label*]

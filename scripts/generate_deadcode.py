@@ -19,7 +19,6 @@ import os
 import re
 import subprocess
 import sys
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -39,14 +38,6 @@ def run(cmd, *, capture=True, cwd=None):
         return 1, "", "TIMEOUT"
     except Exception as e:
         return 1, "", str(e)
-
-
-LEVEL = {
-    lambda p: p >= 90: ("🟢", "EXCELLENT"),
-    lambda p: p >= 80: ("🟢", "TRÈS BON"),
-    lambda p: p >= 70: ("🟡", "BON"),
-    lambda p: p >= 50: ("🟠", "ACCEPTABLE"),
-}
 
 
 def coverage_level(pct):
@@ -105,7 +96,7 @@ def run_cppcheck(src_dir, build_dir, out_dir):
     rc, _, _ = run(cmd)
 
     try:
-        with open(out_file) as f:
+        with open(out_file, encoding="utf-8", errors="replace") as f:
             raw = f.read()
     except Exception:
         return {"error": "cppcheck output not found", "raw": ""}
@@ -135,7 +126,7 @@ def run_gcc_analyzer(src_dir, build_dir, out_dir):
         return {"error": "compile_commands.json not found"}
 
     # Extract compile flags from compile_commands.json
-    with open(compile_commands) as f:
+    with open(compile_commands, encoding="utf-8", errors="replace") as f:
         db = json.load(f)
 
     flags = []
@@ -162,7 +153,7 @@ def run_gcc_analyzer(src_dir, build_dir, out_dir):
     out_file = os.path.join(out_dir, "gcc_analyzer.txt")
 
     findings = []
-    with open(out_file, "w") as f:
+    with open(out_file, "w", encoding="utf-8", errors="replace") as f:
         f.write("=== GCC -fanalyzer Dead Code Analysis ===\n\n")
         for src in sources:
             cmd = (
@@ -223,7 +214,7 @@ def run_coverage_analysis(src_dir, build_dir, out_dir):
     cov_lines = []
     uncov_lines = []
 
-    with open(info_file) as f:
+    with open(info_file, encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
             if line.startswith("SF:"):
@@ -282,7 +273,7 @@ def write_report(cppcheck_res, gcc_res, cov_res, out_dir, src_dir):
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    with open(report_path, "w") as f:
+    with open(report_path, "w", encoding="utf-8", errors="replace") as f:
         def w(s=""):
             f.write(s + "\n")
 
@@ -399,14 +390,6 @@ def write_report(cppcheck_res, gcc_res, cov_res, out_dir, src_dir):
         w()
         w(f"  Lignes jamais exécutées (couverture):  {uncov_total}")
         w()
-        w("  Catégories connues de code mort (analyse manuelle):")
-        w("    🔴  Null-checks après 'new' sans nothrow  — src/context.cpp L.50, L.57")
-        w("    🔴  Stubs [[noreturn]] classe de base dskmap — src/diskmap.cpp L.436-454")
-        w("    🟡  Fonctions debug orphelines — diskmap.cpp:printgaps/printfat, utils.cpp:vareas::print")
-        w("    ✅  Blocs DBG_* désactivés intentionnellement (~120 lignes)")
-        w()
-        w("  Pour le rapport complet et les recommandations: DEADCODE.md")
-        w()
         w(sep)
 
     return report_path
@@ -457,7 +440,7 @@ def main():
 
     # Print report to stdout
     try:
-        with open(report_path) as f:
+        with open(report_path, encoding="utf-8", errors="replace") as f:
             print(f.read())
     except Exception:
         pass

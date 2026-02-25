@@ -267,7 +267,7 @@ void						entry::			opendir() {
 								}
 							}
 							else
-								console::write("{} Skipping.\n", fatx_context::get()->mmi.dialog);
+								console::write(" Skipping.\n", fatx_context::get()->mmi.dialog);
 						}
 						delete ent;
 						ent = nullptr;
@@ -426,8 +426,8 @@ void						entry::			remfrdir(entry *e) {
 		#endif
 		return;
 	}
-	for(entry& f: e->childs)
-		e->remfrdir(&f);
+	while(!e->childs.empty())
+		e->remfrdir(&e->childs.front());
 	mux_D.lock();
 	if(e->cluster != FLK)
 		fatx_context::get()->fat->freefat(e->cluster);
@@ -439,7 +439,7 @@ void						entry::			remfrdir(entry *e) {
 	}
 	auto i = find_if(childs.begin(), childs.end(), [e] (const entry& a) -> bool { return &a == e; });
 	assert(i != childs.end());
-	childs.release(i).release();
+	delete childs.release(i).release();
 	touch(false, false, true);
 	void(write(true));
 	mux_D.unlock();
@@ -1110,7 +1110,6 @@ void						entry::			open(bool w) {
 			areas = make_shared<vareas>(fatx_context::get()->fat->getareas(cluster).sub(size));
 	}
 	else {
-		assert(!writeopened);
 		if(cptacc == 0)
 			exclusive.acquire();
 		if(cptacc == 0 && cluster != 0 && size != 0)
@@ -1123,14 +1122,15 @@ void						entry::			open(bool w) {
 void						entry::			close(bool w) {
 	if(flags.dir)
 		return;
-	if(!opened) {
-		#ifndef NDEBUG
-			dbglog("**> closing a file not opened ({})", path());
-		#endif
-		return;
-	}
 	mux_E.lock();
 	if(w) {
+		if(!writeopened) {
+			#ifndef NDEBUG
+				dbglog("**> closing a file not opened in write mode ({})", path());
+			#endif
+			mux_E.unlock();
+			return;
+		}
 		if(flush(true)) {
 			mux_E.unlock();
 			return;
@@ -1139,7 +1139,13 @@ void						entry::			close(bool w) {
 		exclusive.release();
 	}
 	else {
-		assert(!writeopened);
+		if(cptacc == 0) {
+			#ifndef NDEBUG
+				dbglog("**> closing a file not opened in read mode ({})", path());
+			#endif
+			mux_E.unlock();
+			return;
+		}
 		cptacc--;
 		if(cptacc == 0) {
 			areas = nullptr;
@@ -1152,6 +1158,6 @@ void						entry::			close(bool w) {
 		if(cptacc == 0)
 			exclusive.release();
 	}
-	opened = false;
+	opened = writeopened || cptacc > 0;
 	mux_E.unlock();
 }

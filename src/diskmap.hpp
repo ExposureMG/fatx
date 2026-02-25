@@ -110,8 +110,8 @@ public:
                                     memmap(const partition&);
     clusptr							read(clusptr) override;
     void							change(clusptr, entry*, clusptr = FLK, status_t = marked) override;
-    status_t						status(clusptr) const override;
-    entry*							getentry(clusptr) const override;
+    [[gnu::pure]] status_t					status(clusptr) const override;
+    [[gnu::pure]] entry*					getentry(clusptr) const override;
     void							fatlost() override;
     void							fatcheck() override;
     #ifndef NDEBUG

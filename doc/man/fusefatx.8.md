@@ -15,6 +15,7 @@ fusefatx - mounts an Xbox 360 FATX filesystem
   [**--diff** *diff-file*]
   [**--nodate**]
   [**--nolost**]
+    [**--version**]
   [**--uid** *uid*]
   [**--gid** *gid*]
   [**--mask** *mask*]

@@ -109,7 +109,8 @@ TEST_F(ContextTest, Context_ClusterArithmetic_ptr2cls) {
     mmi.table = "";
     mmi.diffile = "";
     
-    fatx_context::set(new fatx_context(mmi));
+    auto* ctx = new fatx_context(mmi);
+    fatx_context::set(ctx);
     
     // Set partition parameters
     fatx_context::get()->par.clus_pow = 12;
@@ -125,6 +126,7 @@ TEST_F(ContextTest, Context_ClusterArithmetic_ptr2cls) {
     
     // Cleanup
     fatx_context::set(nullptr);
+    delete ctx;
 }
 
 TEST_F(ContextTest, Context_ClusterArithmetic_cls2ptr) {
@@ -136,7 +138,8 @@ TEST_F(ContextTest, Context_ClusterArithmetic_cls2ptr) {
     mmi.table = "";
     mmi.diffile = "";
     
-    fatx_context::set(new fatx_context(mmi));
+    auto* ctx = new fatx_context(mmi);
+    fatx_context::set(ctx);
     
     // Set partition parameters
     fatx_context::get()->par.clus_pow = 12;
@@ -153,6 +156,7 @@ TEST_F(ContextTest, Context_ClusterArithmetic_cls2ptr) {
     
     // Cleanup
     fatx_context::set(nullptr);
+    delete ctx;
 }
 
 TEST_F(ContextTest, Context_Destroy_Method) {
@@ -199,7 +203,8 @@ TEST_F(ContextTest, Context_ClusterArithmetic_siz2cls_Boundary) {
     mmi.table = "";
     mmi.diffile = "";
     
-    fatx_context::set(new fatx_context(mmi));
+    auto* ctx = new fatx_context(mmi);
+    fatx_context::set(ctx);
     
     fatx_context::get()->par.clus_pow = 12;
     fatx_context::get()->par.clus_size = 4096;
@@ -214,6 +219,7 @@ TEST_F(ContextTest, Context_ClusterArithmetic_siz2cls_Boundary) {
     EXPECT_EQ(clusters_plus, 2);
     
     fatx_context::set(nullptr);
+    delete ctx;
 }
 
 TEST_F(ContextTest, Context_ClusterArithmetic_Zero_Size) {
@@ -224,7 +230,8 @@ TEST_F(ContextTest, Context_ClusterArithmetic_Zero_Size) {
     mmi.table = "";
     mmi.diffile = "";
     
-    fatx_context::set(new fatx_context(mmi));
+    auto* ctx = new fatx_context(mmi);
+    fatx_context::set(ctx);
     
     fatx_context::get()->par.clus_pow = 12;
     fatx_context::get()->par.clus_size = 4096;
@@ -235,6 +242,7 @@ TEST_F(ContextTest, Context_ClusterArithmetic_Zero_Size) {
     EXPECT_EQ(zero_clusters, 0);
     
     fatx_context::set(nullptr);
+    delete ctx;
 }
 
 TEST_F(ContextTest, Context_ClusterArithmetic_Large_Size) {
@@ -245,7 +253,8 @@ TEST_F(ContextTest, Context_ClusterArithmetic_Large_Size) {
     mmi.table = "";
     mmi.diffile = "";
     
-    fatx_context::set(new fatx_context(mmi));
+    auto* ctx = new fatx_context(mmi);
+    fatx_context::set(ctx);
     
     fatx_context::get()->par.clus_pow = 12;
     fatx_context::get()->par.clus_size = 4096;
@@ -256,6 +265,7 @@ TEST_F(ContextTest, Context_ClusterArithmetic_Large_Size) {
     EXPECT_GT(large_clusters, 0);
     
     fatx_context::set(nullptr);
+    delete ctx;
 }
 
 TEST_F(ContextTest, Context_ClusterArithmetic_ptr2cls_Multiple) {
@@ -266,7 +276,8 @@ TEST_F(ContextTest, Context_ClusterArithmetic_ptr2cls_Multiple) {
     mmi.table = "";
     mmi.diffile = "";
     
-    fatx_context::set(new fatx_context(mmi));
+    auto* ctx = new fatx_context(mmi);
+    fatx_context::set(ctx);
     
     fatx_context::get()->par.clus_pow = 12;
     fatx_context::get()->par.clus_size = 4096;
@@ -283,6 +294,7 @@ TEST_F(ContextTest, Context_ClusterArithmetic_ptr2cls_Multiple) {
     EXPECT_EQ(cls2, 2);
     
     fatx_context::set(nullptr);
+    delete ctx;
 }
 
 TEST_F(ContextTest, Context_ClusterArithmetic_cls2ptr_Multiple) {
@@ -293,7 +305,8 @@ TEST_F(ContextTest, Context_ClusterArithmetic_cls2ptr_Multiple) {
     mmi.table = "";
     mmi.diffile = "";
     
-    fatx_context::set(new fatx_context(mmi));
+    auto* ctx = new fatx_context(mmi);
+    fatx_context::set(ctx);
     
     fatx_context::get()->par.clus_pow = 12;
     fatx_context::get()->par.clus_size = 4096;
@@ -311,6 +324,7 @@ TEST_F(ContextTest, Context_ClusterArithmetic_cls2ptr_Multiple) {
     EXPECT_EQ(ptr2, 0x11000);
     
     fatx_context::set(nullptr);
+    delete ctx;
 }
 
 TEST_F(ContextTest, Context_ClusterArithmetic_Out_Of_Bounds) {
@@ -321,7 +335,8 @@ TEST_F(ContextTest, Context_ClusterArithmetic_Out_Of_Bounds) {
     mmi.table = "";
     mmi.diffile = "";
     
-    fatx_context::set(new fatx_context(mmi));
+    auto* ctx = new fatx_context(mmi);
+    fatx_context::set(ctx);
     
     fatx_context::get()->par.clus_pow = 12;
     fatx_context::get()->par.clus_size = 4096;
@@ -335,6 +350,7 @@ TEST_F(ContextTest, Context_ClusterArithmetic_Out_Of_Bounds) {
     EXPECT_EQ(ptr, 0);
     
     fatx_context::set(nullptr);
+    delete ctx;
 }
 
 TEST_F(ContextTest, Context_Multiple_Set_And_Get) {

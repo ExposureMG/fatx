@@ -177,13 +177,12 @@ TEST_F(DiskMapContextTest, Dskmap_GapCheck) {
 }
 
 
+#ifndef NDEBUG
 TEST_F(DiskMapContextTest, Dskmap_PrintGaps) {
     dskmap dm(ctx->par);
     dm.printgaps(); // Devrait s'exécuter sans erreur
     EXPECT_TRUE(true);
 }
-
-#ifndef NDEBUG
 #endif
 
 TEST_F(DiskMapContextTest, Dskmap_ResizeFat) {
@@ -752,6 +751,7 @@ TEST_F(DiskMapContextTest, Dskmap_Chain4Byte_RealRead) {
 }
 
 // Couvre printgaps() avec des gaps non vides (ligne de la boucle dbglog)
+#ifndef NDEBUG
 TEST_F(DiskMapContextTest, Dskmap_Printgaps_WithGaps) {
 	dskmap dm(ctx->par);
 	dm.erase();   // force scanned=false pour recharger les gaps
@@ -760,6 +760,7 @@ TEST_F(DiskMapContextTest, Dskmap_Printgaps_WithGaps) {
 	dm.printgaps();
 	EXPECT_GT(dm.clsavail(), 0u);
 }
+#endif
 
 // Couvre freefat(FLK) et freefat(EOC) (retour immédiat sans crash)
 TEST_F(DiskMapContextTest, Dskmap_FreeFat_SpecialValues) {
@@ -837,7 +838,7 @@ TEST_F(DiskMapContextTest, MemMap_FatCheck_Unrm_Local) {
 
 	mm.fatcheck();
 
-	chdir(saved_cwd);
+    EXPECT_EQ(chdir(saved_cwd), 0);
 	std::filesystem::remove_all(tmpdir);
 
 	ctx->fat = nullptr;

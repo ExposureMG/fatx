@@ -51,6 +51,10 @@ compile_commands.json
 # Log files
 *.log
 
+# Python bytecode cache
+__pycache__/
+*.py[cod]
+
 # Backup files
 *~
 *.bak

@@ -475,6 +475,7 @@ void						frontend::		parser() {
 			}
 			entry *n = new entry(i->substr(l + 1), 0, true);
 			if(s->addtodir(n)) {
+				delete n;
 				console::write("failed\n");
 				continue;
 			}
@@ -521,6 +522,7 @@ void						frontend::		parser() {
 			}
 			entry *n = new entry(i->substr(l + 1), s->size);
 			if(d->addtodir(n)) {
+				delete n;
 				console::write("*ERR*\n");
 				continue;
 			}
@@ -557,6 +559,7 @@ void						frontend::		parser() {
 			}
 			entry *n = new entry(i->substr(l + 1), siz);
 			if(d->addtodir(n)) {
+				delete n;
 				console::write("*ERR*\n");
 				continue;
 			}

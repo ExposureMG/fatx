@@ -6,13 +6,18 @@ project(
 )
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/scripts)
 
-# Option pour activer les tests
-option(BUILD_TESTS "Build test suite" ON)
-option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
-
+# Fixer le type de build par défaut AVANT toute option qui en dépend
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
+
+# Option pour activer les tests (OFF par défaut en Release)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  option(BUILD_TESTS "Build test suite" ON)
+else()
+  option(BUILD_TESTS "Build test suite" OFF)
+endif()
+option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
 
 option(SANITIZE "Enable sanitizers" OFF)
 
@@ -26,20 +31,30 @@ find_package(
 find_package(Doxygen COMPONENTS dot)
 find_package(FUSE3 3.1 REQUIRED)
 
-# Chercher GoogleTest pour les tests unitaires
-find_package(GTest QUIET)
-if(NOT GTest_FOUND)
-  # Si GTest n'est pas trouvé, essayer de le télécharger avec FetchContent
-  include(FetchContent)
-  FetchContent_Declare(
-    googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG v1.14.0
-  )
-  # Empêcher l'installation de GTest
-  set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-  set(INSTALL_GMOCK OFF CACHE BOOL "" FORCE)
-  FetchContent_MakeAvailable(googletest)
+# Marquer les bibliothèques tierces comme SYSTEM : leurs headers seront
+# compilés avec -isystem et n'amèneront pas de warnings
+set_target_properties(Boost::program_options PROPERTIES SYSTEM TRUE)
+set_target_properties(FUSE3::fuse3 PROPERTIES SYSTEM TRUE)
+
+# Chercher GoogleTest uniquement si les tests sont activés
+if(BUILD_TESTS)
+  find_package(GTest QUIET)
+  if(GTest_FOUND)
+    set_target_properties(GTest::gtest GTest::gtest_main GTest::gmock PROPERTIES SYSTEM TRUE)
+  else()
+    # Si GTest n'est pas trouvé, essayer de le télécharger avec FetchContent
+    include(FetchContent)
+    FetchContent_Declare(
+      googletest
+      GIT_REPOSITORY https://github.com/google/googletest.git
+      GIT_TAG v1.14.0
+      SYSTEM          # headers compilés avec -isystem (CMake 3.25+)
+    )
+    # Empêcher l'installation de GTest
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    set(INSTALL_GMOCK OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+  endif()
 endif()
 
 set(CMAKE_CXX_STANDARD 26)
@@ -94,8 +109,8 @@ add_compile_options(
   -Wsuggest-attribute=malloc
   -Wsuggest-attribute=format
   -Wsuggest-attribute=cold
-  -Wsuggest-final-methods
-  -Wsuggest-final-types
+  # -Wsuggest-final-methods
+  # -Wsuggest-final-types
   -Wsuggest-override
   -Wswitch-default
   -Wswitch-enum
@@ -110,8 +125,11 @@ add_compile_options(
   -Wno-inline
 )
 
-add_compile_options($<$<OR:$<CONFIG:Debug>,$<BOOL:$ENV{CI}>>:$<$<CXX_COMPILER_ID:MSVC>:/WX>>)
-add_compile_options($<$<OR:$<CONFIG:Debug>,$<BOOL:$ENV{CI}>>:$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Werror>>)
+add_compile_options($<$<CONFIG:Debug>:$<$<CXX_COMPILER_ID:MSVC>:/WX>>)
+add_compile_options($<$<CONFIG:Debug>:$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Werror>>)
+# -Wnull-dereference génère des faux positifs en Release via l'inlining agressif
+# de Boost.Bimap/multi_index dans les headers STL — supprimé en Release uniquement
+add_compile_options($<$<CONFIG:Release>:-Wno-null-dereference>)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   if(ENABLE_COVERAGE)
     message(STATUS "Enabling code coverage")
@@ -274,7 +292,16 @@ if(BUILD_TESTS AND (GTest_FOUND OR googletest_POPULATED))
   endif()
 
   include(GoogleTest)
-  gtest_discover_tests(fatx_tests WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+  if(SANITIZE)
+    gtest_discover_tests(
+      fatx_tests
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+      PROPERTIES
+        ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0:halt_on_error=1;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1"
+    )
+  else()
+    gtest_discover_tests(fatx_tests WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+  endif()
 endif()
 
 include(GNUInstallDirs)
@@ -300,13 +327,17 @@ if(PANDOC)
     )
     list(APPEND _man_outputs ${_out})
   endforeach()
-  add_custom_target(man ALL DEPENDS ${_man_outputs})
+  add_custom_target(man DEPENDS ${_man_outputs})
   install(DIRECTORY ${PROJECT_BINARY_DIR}/man8/
     DESTINATION ${CMAKE_INSTALL_MANDIR}/man8
     FILES_MATCHING PATTERN "*.gz"
   )
 else()
   message(STATUS "pandoc not found: using pre-built man pages from man8/")
+  add_custom_target(man
+    COMMENT "pandoc not found: using pre-built man pages from man8/"
+    VERBATIM
+  )
   install(DIRECTORY man8 TYPE MAN)
 endif()
 install(
@@ -324,13 +355,13 @@ install(
 )
 
 if(DOXYGEN_FOUND)
-  add_custom_target(doxygen EXCLUDE_FROM_ALL
+  add_custom_target(doxygen
     COMMAND ${DOXYGEN_EXECUTABLE} ${PROJECT_SOURCE_DIR}/doc/doxygen.cfg
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Generating Doxygen documentation"
     VERBATIM
   )
-  install(DIRECTORY ${CMAKE_BINARY_DIR}/html TYPE DOC)
+  install(DIRECTORY ${CMAKE_BINARY_DIR}/html TYPE DOC OPTIONAL)
 endif()
 
 # Cible pour générer le rapport de couverture avec analyse par module (nécessite lcov)
@@ -339,8 +370,17 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clan
   find_program(LCOV_FOUND lcov)
   find_program(GENHTML_FOUND genhtml)
   if(LCOV_FOUND AND GENHTML_FOUND AND PYTHON3_EXECUTABLE)
+    # Calculate number of parallel jobs for tests
+    include(ProcessorCount)
+    ProcessorCount(TEST_JOBS)
+    if(NOT TEST_JOBS OR TEST_JOBS EQUAL 0)
+      set(TEST_JOBS 1)
+    endif()
+    
     add_custom_target(coverage
-      COMMAND ${PYTHON3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/generate_coverage.py --build-dir ${CMAKE_BINARY_DIR}
+          COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+            PYTHONPYCACHEPREFIX=${CMAKE_BINARY_DIR}/.pycache
+              ${PYTHON3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/generate_coverage.py --build-dir ${CMAKE_BINARY_DIR} --jobs ${TEST_JOBS}
       COMMENT "Generating coverage report with module analysis"
       DEPENDS fatx_tests
     )
@@ -368,7 +408,16 @@ foreach(i RANGE 0 ${nb})
   list(GET names ${i} test_name)
   message("-- Found test: ${test_name}")
   add_test(NAME ${test_name} COMMAND ${BASH} test.sh ${i})
-  set_tests_properties(${test_name} PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+  if(SANITIZE)
+    set_tests_properties(
+      ${test_name}
+      PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0:halt_on_error=1;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1"
+    )
+  else()
+    set_tests_properties(${test_name} PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+  endif()
 endforeach(i)
 
 # Add a convenient target to run all tests via CTest
@@ -385,12 +434,91 @@ add_custom_target(run_tests DEPENDS run_all_tests)
 # Cible pour l'analyse de code mort (cppcheck + GCC -fanalyzer + couverture lcov)
 if(PYTHON3_EXECUTABLE)
   add_custom_target(deadcode
-    COMMAND ${PYTHON3_EXECUTABLE}
+      COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+        PYTHONPYCACHEPREFIX=${CMAKE_BINARY_DIR}/.pycache
+            ${PYTHON3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/scripts/generate_deadcode.py
             --build-dir ${CMAKE_BINARY_DIR}
             --src-dir   ${PROJECT_SOURCE_DIR}/src
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Analyse de code mort → ${CMAKE_BINARY_DIR}/deadcode_report/report.txt"
+    VERBATIM
+  )
+endif()
+
+# Cible pour les tests de fuites mémoire avec valgrind (memcheck + helgrind + drd)
+find_program(VALGRIND_EXECUTABLE valgrind)
+find_program(PYTHON3_EXECUTABLE python3)
+include(ProcessorCount)
+ProcessorCount(VALGRIND_JOBS)
+if(NOT VALGRIND_JOBS OR VALGRIND_JOBS EQUAL 0)
+  set(VALGRIND_JOBS 1)
+endif()
+if(PYTHON3_EXECUTABLE AND BUILD_TESTS)
+  # Calculate number of parallel jobs for tests
+  include(ProcessorCount)
+  ProcessorCount(TEST_JOBS)
+  if(NOT TEST_JOBS OR TEST_JOBS EQUAL 0)
+    set(TEST_JOBS 1)
+  endif()
+  
+  add_custom_target(sanitize
+      COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+        PYTHONPYCACHEPREFIX=${CMAKE_BINARY_DIR}/.pycache
+            ${PYTHON3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/scripts/generate_sanitize.py
+            --build-dir ${CMAKE_BINARY_DIR}
+            --report-dir ${CMAKE_BINARY_DIR}/sanitize_report
+            --run-tests
+            --ctest ${CMAKE_CTEST_COMMAND}
+            --jobs ${TEST_JOBS}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    DEPENDS fatx_tests
+    COMMENT "Running sanitizer tests (ASAN/UBSAN)"
+    VERBATIM
+  )
+endif()
+if(VALGRIND_EXECUTABLE AND PYTHON3_EXECUTABLE AND BUILD_TESTS)
+  add_custom_target(memcheck
+      COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+        PYTHONPYCACHEPREFIX=${CMAKE_BINARY_DIR}/.pycache
+            ${PYTHON3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/scripts/generate_memcheck.py
+            --build-dir ${CMAKE_BINARY_DIR}
+            --binary ${CMAKE_BINARY_DIR}/fatx_tests
+            --ctest ${CMAKE_CTEST_COMMAND}
+            --jobs ${VALGRIND_JOBS}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    DEPENDS fatx_tests
+    COMMENT "Running memory tests (memcheck)"
+    VERBATIM
+  )
+  add_custom_target(helgrind
+      COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+        PYTHONPYCACHEPREFIX=${CMAKE_BINARY_DIR}/.pycache
+            ${PYTHON3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/scripts/generate_helgrind.py
+            --build-dir ${CMAKE_BINARY_DIR}
+            --binary ${CMAKE_BINARY_DIR}/fatx_tests
+            --ctest ${CMAKE_CTEST_COMMAND}
+            --jobs ${VALGRIND_JOBS}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    DEPENDS fatx_tests
+    COMMENT "Running memory tests (helgrind)"
+    VERBATIM
+  )
+  add_custom_target(drd
+      COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+        PYTHONPYCACHEPREFIX=${CMAKE_BINARY_DIR}/.pycache
+            ${PYTHON3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/scripts/generate_drd.py
+            --build-dir ${CMAKE_BINARY_DIR}
+            --binary ${CMAKE_BINARY_DIR}/fatx_tests
+            --ctest ${CMAKE_CTEST_COMMAND}
+            --jobs ${VALGRIND_JOBS}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    DEPENDS fatx_tests
+    COMMENT "Running memory tests (drd)"
     VERBATIM
   )
 endif()

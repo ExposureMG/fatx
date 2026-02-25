@@ -89,11 +89,11 @@ public:
 };
 class								vareas : public std::vector<area> {
 public:
-	clusptr							first() const;
-	clusptr							last() const;
-	size_t							nbcls(clusptr = 0) const;
-	clusptr							at(size_t) const;
-	iterator						in(size_t);
+	[[gnu::pure]] clusptr			first() const;
+	[[gnu::pure]] clusptr			last() const;
+	[[gnu::pure]] size_t			nbcls(clusptr = 0) const;
+	[[gnu::pure]] clusptr			at(size_t) const;
+	[[gnu::pure]] iterator			in(size_t);
 	vareas							sub(filesize, filesize = 0) const;
 	void							add(vareas);
 	void							add(clusptr);
@@ -297,7 +297,7 @@ class								nameval {
 private:
     static const std::unordered_set<char> fchar;
 public:
-    static int						is_valid(std::string);
+    [[gnu::pure]] static int		is_valid(std::string);
 };
 
 // Macro for debug output

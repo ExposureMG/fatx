@@ -17,6 +17,7 @@ unrm.fatx - tries to recover deleted files on an Xbox 360 FATX filesystem
   [**--nolost**]
   [**--offset** *offset*]
   [**--size** *size*]
+    [**--version**]
   [**-b** | **--table** **file**|**mu**|**usb**|**hd**|**kit**]
   [**-p** | **--partition** **sc**|**gc**|**se1**|**se2**|**xdv**|**x1**|**x2**]
   [**-i** | **--input**] *device*

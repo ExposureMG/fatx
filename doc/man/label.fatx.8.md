@@ -15,6 +15,7 @@ label.fatx - manage an Xbox 360 FATX filesystem volume name
   [**--diff** *diff-file*]
   [**--offset** *offset*]
   [**--size** *size*]
+    [**--version**]
   [**-b** | **--table** **file**|**mu**|**usb**|**hd**|**kit**]
   [**-p** | **--partition** **sc**|**gc**|**se1**|**se2**|**xdv**|**x1**|**x2**]
   [**-l** | **--label** *label*]

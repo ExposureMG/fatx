@@ -7,6 +7,7 @@ import sys
 import os
 import re
 from pathlib import Path
+from datetime import datetime
 from typing import Dict, Tuple
 
 def run_command(cmd, cwd=None, capture=False, filter_output=None):
@@ -135,12 +136,61 @@ def print_coverage_report(stats: Dict[str, Tuple[int, int, float]]):
     print("  🟠 ACCEPTABLE (≥50%) | 🔴 À AMÉLIORER (<50%)")
     print("\n")
 
+
+def write_coverage_report(
+    report_file: Path,
+    build_dir: Path,
+    info_file: Path,
+    html_index: Path,
+    stats: Dict[str, Tuple[int, int, float]],
+    ctest_rc: int,
+):
+    total_hit = sum(v[0] for v in stats.values())
+    total_lines = sum(v[1] for v in stats.values())
+    avg_percent = (total_hit / total_lines) * 100 if total_lines else 0.0
+
+    with open(report_file, "w", encoding="utf-8", errors="replace") as f:
+        f.write("=" * 80 + "\n")
+        f.write("FATX COVERAGE REPORT\n")
+        f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write("=" * 80 + "\n\n")
+
+        f.write("SUMMARY\n")
+        f.write("-" * 80 + "\n")
+        f.write(f"Build dir: {build_dir}\n")
+        f.write(f"CTest exit code: {ctest_rc}\n")
+        f.write(f"Modules analyzed: {len(stats)}\n")
+        f.write(f"Total covered lines: {total_hit}\n")
+        f.write(f"Total lines: {total_lines}\n")
+        f.write(f"Global coverage: {avg_percent:.1f}%\n")
+        status = "✓ Coverage report generated" if stats else "✗ Coverage report generation incomplete"
+        f.write(f"Status: {status}\n\n")
+
+        f.write("MODULES\n")
+        f.write("=" * 80 + "\n")
+        for filename in sorted(stats.keys()):
+            lh, lf, percent = stats[filename]
+            level, emoji = classify_coverage(percent)
+            f.write(f"- {filename}: {percent:.1f}% ({lh}/{lf}) [{emoji} {level}]\n")
+        f.write("\n")
+
+        f.write("ARTIFACTS\n")
+        f.write("-" * 80 + "\n")
+        f.write(f"LCOV info: {info_file}\n")
+        f.write(f"HTML report: {html_index}\n")
+        f.write(f"Text report: {report_file}\n")
+
+
 def main():
     """Main function."""
     import argparse
-    parser = argparse.ArgumentParser(description="Generate coverage report")
+    parser = argparse.ArgumentParser(description="FATX coverage report generator")
     parser.add_argument("--build-dir", default=None,
                         help="Build directory (default: <project>/build)")
+    parser.add_argument("--report-dir", default=None,
+                        help="Coverage report output directory (default: <build>/coverage_final_report)")
+    parser.add_argument("--jobs", type=int, default=1,
+                        help="Number of parallel jobs for CTest (default: 1)")
     args = parser.parse_args()
 
     project_dir = Path(__file__).parent.parent
@@ -178,7 +228,8 @@ def main():
         print("Warning: failed to build/copy test.sh target (continuing...)")
 
     print("2. Running all tests via CTest...")
-    rc, out, err = run_command("ctest --output-on-failure -j 1", cwd=str(build_dir), capture=True)
+    rc, out, err = run_command(f"ctest --output-on-failure -j {args.jobs}", cwd=str(build_dir), capture=True)
+    ctest_rc = rc
     if rc != 0:
         print("   Warning: Some tests failed. Continuing to capture coverage data.")
         print(out)
@@ -206,7 +257,7 @@ def main():
     
     # Generate HTML report
     print("3. Generating HTML report...")
-    report_dir = build_dir / "coverage_final_report"
+    report_dir = Path(args.report_dir) if args.report_dir else (build_dir / "coverage_final_report")
     rc, _, _ = run_command(f"genhtml {build_dir}/coverage_final.info --output-directory {report_dir} --ignore-errors inconsistent,inconsistent",
                           cwd=str(project_dir),
                           filter_output=["Dropping ", "dropping ", "ignoring data for external"])
@@ -218,7 +269,17 @@ def main():
     stats = extract_coverage_stats(str(build_dir / "coverage_final.info"), str(build_dir))
     
     if stats:
+        report_file = report_dir / "report.txt"
+        write_coverage_report(
+            report_file=report_file,
+            build_dir=build_dir,
+            info_file=build_dir / "coverage_final.info",
+            html_index=report_dir / "index.html",
+            stats=stats,
+            ctest_rc=ctest_rc,
+        )
         print_coverage_report(stats)
+        print(f"Report: {report_file}")
         return 0
     else:
         print("Could not extract coverage statistics")

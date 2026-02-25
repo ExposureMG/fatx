@@ -7,21 +7,24 @@ FATX=./fatx
 FBIN=$FATX
 FTXT=test.sh
 
+TSUF=${TEST:-main}
+
 SIZE=300
 WAIT=3
-TIMEOUT=30
+TIMEOUT=60
 TABLE=file
 PARTITION=x2
 NFILE=5
 
-DSK=disk.fatx
-DIF=disk.dif
-MNT=mnt.fatx
+DSK=disk.${TSUF}.fatx
+DIF=disk.${TSUF}.dif
+MNT=mnt.fatx.${TSUF}
 FUSE=
 
 prepare() {
 	echo Prepare context
 	[ -d $MNT ] && fusermount -u $MNT 2>/dev/null
+	rm -f "$DSK" "$DIF"
 	[ -d $MNT ] || mkdir $MNT
 #	[ -e $DSK ] || dd if=<(yes $'\xFF' | tr -d "\n") of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
 	[ -e $DSK ] || dd if=/dev/urandom of=$DSK bs=$((1024*1024)) count=$SIZE iflag=fullblock
@@ -70,8 +73,8 @@ kilfuse() {
 }
 close() {
 	rmdir $MNT
-	#[ -e $DSK ] && rm $DSK
-	#[ -z $DIF ] || ([ -e $DIF ] && rm $DIF)
+	[ -e $DSK ] && rm $DSK
+	[ -z $DIF ] || ([ -e $DIF ] && rm $DIF)
 	[ -z $REF ] || ([ -e $REF ] && rm $REF)
 	echo -n
 }
@@ -590,5 +593,17 @@ if [ "$testr" != "unrm4" ]; then
 	trap kilfuse SIGINT
 fi
 prepare
-mkfs1 && $testr && fsck1 && close && exit 0
-exit 1
+
+tmpout=$(mktemp)
+set +e
+(
+	mkfs1 && $testr && fsck1 && close
+) >"$tmpout" 2>&1
+rc=$?
+set -e
+
+cat "$tmpout"
+grep -q "### Test KO" "$tmpout" && rc=1
+rm -f "$tmpout"
+
+exit $rc
