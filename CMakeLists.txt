@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.30..3.31)
 project(
   fatx
-  VERSION 1.18
+  VERSION 1.19
   LANGUAGES C CXX
 )
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/scripts)
