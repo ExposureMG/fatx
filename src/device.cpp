@@ -308,8 +308,8 @@ int						device::			setup() {
 	#endif
 	return err ? EIO : 0;
 }
-std::string				device::			read(streamptr p, size_t s) {
-	std::string res;
+byte_buffer             device::            read_bytes(streamptr p, size_t s) {
+	byte_buffer res;
 	if(s == 0)
 		return res;
 	if(size() && p + s > size()) {
@@ -320,13 +320,13 @@ std::string				device::			read(streamptr p, size_t s) {
 		);
 		return res;
 	}
-	res.resize(s);
+	res.resize(s, std::byte{0});
 	bool status = false;
 	authd.lock();
 	if(usbd.empty()) {
 		status = status || io
 			.seekg(static_cast<std::basic_istream<char>::off_type>(p))
-			.read(&res[0], static_cast<std::streamsize>(s))
+			.read(reinterpret_cast<char*>(res.data()), static_cast<std::streamsize>(s))
 			.fail()
 		;
 		if(status)
@@ -343,7 +343,7 @@ std::string				device::			read(streamptr p, size_t s) {
 			auto siz = std::min<filesize>(res.size() - c, (next(i, 1) == usbd.end() ? size() : next(i, 1)->first) - i->first - (p > i->first ? pos : 0));
 			status = status || i->second
 				.seekg(static_cast<std::basic_istream<char>::off_type>(pos))
-				.read(&res[c], static_cast<std::streamsize>(siz))
+				.read(reinterpret_cast<char*>(res.data()) + c, static_cast<std::streamsize>(siz))
 				.fail()
 			;
 			if(status) {
@@ -353,26 +353,35 @@ std::string				device::			read(streamptr p, size_t s) {
 			c += siz;
 		}
 	}
-	if(iod.is_open())
-		status = status || chgf.read(iod, p, s, res);
+	if(iod.is_open()) {
+		std::string overlay(res.size(), '\0');
+		for(size_t i = 0; i < res.size(); i++)
+			overlay[i] = static_cast<char>(res[i]);
+		status = status || chgf.read(iod, p, s, overlay);
+		if(!status)
+			for(size_t i = 0; i < res.size(); i++)
+				res[i] = static_cast<std::byte>(static_cast<unsigned char>(overlay[i]));
+	}
 	if(status) {
 		console::write("Unreadable block at 0x{:016X}.\n", true, p);
 		authd.unlock();
-		res.clear();  // Clear instead of returning a new string
+		res.clear();
 		return res;
-	} else {
-		#if !defined NDEBUG && defined DBG_READ
-			devlog(true, p, res);
-		#endif
 	}
+	#if !defined NDEBUG && defined DBG_READ
+		std::string dbg(res.size(), '\0');
+		for(size_t i = 0; i < res.size(); i++)
+			dbg[i] = static_cast<char>(res[i]);
+		devlog(true, p, dbg);
+	#endif
 	authd.unlock();
 	return res;
 }
-int						device::			write(streamptr p, const std::string &s) {
-	if(s.empty())
+int                     device::            write_bytes(streamptr p, byte_view bytes) {
+	if(bytes.empty())
 		return 0;
-	if(p + s.size() > size()) {
-		console::write("Blocks out of bounds ([0x{:016X};0x{:016X}] > 0x{:016X}).\n", true, p, p + s.size() - 1, size());
+	if(p + bytes.size() > size()) {
+		console::write("Blocks out of bounds ([0x{:016X};0x{:016X}] > 0x{:016X}).\n", true, p, p + bytes.size() - 1, size());
 		return EOVERFLOW;
 	}
 	if(!fatx_context::get()->mmi.writeable())
@@ -380,39 +389,42 @@ int						device::			write(streamptr p, const std::string &s) {
 	bool status = false;
 	authd.lock();
 	#ifndef NO_WRITE
-		if(iod.is_open())
-			status = status || chgf.write(iod, p, s);
-		else
-			if(usbd.empty()) {
-				status = status || io
-					.seekp(static_cast<std::basic_istream<char>::off_type>(p))
-					.write(&s[0], static_cast<std::streamsize>(s.size()))
+		if(iod.is_open()) {
+			std::string raw(bytes.size(), '\0');
+			for(size_t i = 0; i < bytes.size(); i++)
+				raw[i] = static_cast<char>(bytes[i]);
+			status = status || chgf.write(iod, p, raw);
+		}
+		else if(usbd.empty()) {
+			status = status || io
+				.seekp(static_cast<std::basic_istream<char>::off_type>(p))
+				.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()))
+				.fail()
+			;
+			if(status)
+				io.clear();
+		}
+		else {
+			auto b = usbd.lower_bound(p);
+			if(b != usbd.begin() && b->first > p)
+				b--;
+			auto e = usbd.lower_bound(p + bytes.size());
+			streamptr c = 0;
+			for(auto i = b; i != e; i++) {
+				auto pos = p > i->first ? p - i->first : 0;
+				auto siz = std::min<filesize>(bytes.size() - c, (next(i, 1) == usbd.end() ? size() : next(i, 1)->first) - i->first - (p > i->first ? pos : 0));
+				status = status || i->second
+					.seekp(static_cast<std::basic_ostream<char>::off_type>(pos))
+					.write(reinterpret_cast<const char*>(bytes.data()) + c, static_cast<std::streamsize>(siz))
 					.fail()
 				;
-				if(status)
-					io.clear();
-			}
-			else {
-				auto b = usbd.lower_bound(p);		// *b >= p
-				if(b != usbd.begin() && b->first > p)
-					b--;						// *b < p && *b + b->s > p
-				auto e = usbd.lower_bound(p + s.size());	// *e > p + s - 1
-				streamptr c = 0;
-				for(auto i = b; i != e; i++) {
-					auto pos = p > i->first ? p - i->first : 0;
-					auto siz = std::min<filesize>(s.size() - c, (next(i, 1) == usbd.end() ? size() : next(i, 1)->first) - i->first - (p > i->first ? pos : 0));
-					status = status || i->second
-						.seekp(static_cast<std::basic_ostream<char>::off_type>(pos))
-						.write(&s[c], static_cast<std::streamsize>(siz))
-						.fail()
-					;
-					if(status) {
-						i->second.clear();
-						break;
-					}
-					c += siz;
+				if(status) {
+					i->second.clear();
+					break;
 				}
+				c += siz;
 			}
+		}
 		changes = true;
 	#endif
 	if(status) {
@@ -420,11 +432,12 @@ int						device::			write(streamptr p, const std::string &s) {
 		authd.unlock();
 		return EIO;
 	}
-	else {
-		#if !defined NDEBUG && defined DBG_WRITE
-			devlog(false, p, s);
-		#endif
-	}
+	#if !defined NDEBUG && defined DBG_WRITE
+		std::string dbg(bytes.size(), '\0');
+		for(size_t i = 0; i < bytes.size(); i++)
+			dbg[i] = static_cast<char>(bytes[i]);
+		devlog(false, p, dbg);
+	#endif
 	authd.unlock();
 	return 0;
 }
@@ -466,8 +479,9 @@ std::string				device::			print(streamptr p, size_t s, size_t g) {
 	std::string res;
 	std::string buf;
 	size_t i = 1;
-	for(const char c: read(p, s)) {
-		buf += c;
+	for(const std::byte c: read_bytes(p, s)) {
+		const char rc = static_cast<char>(c);
+		buf += rc;
 		if((i % g) == 0) {
 			for(size_t j = 0; j < g; j++)
 				res += std::format("{:02X} ", static_cast<unsigned int>(static_cast<unsigned char>(buf[j])));

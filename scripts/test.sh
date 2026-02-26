@@ -194,7 +194,7 @@ fuse7() {
 	if [ -z $1 ]; then
 		prefuse
 	fi
-	tasks=
+	tasks=()
 	if [ -z $1 ]; then
 		nmax=$NFILE
 	else
@@ -213,25 +213,37 @@ fuse7() {
 	sleep $WAIT
 	for ((n = 1; n <= $nmax; n++)); do
 		cp $MNT/r$n $MNT/w$n &
-		tasks+=$!" "
+		tasks+=($!)
 		sleep 0.1
 	done
-	tasks+=$!
-	nbtasks=${#tasks[*]}
+	nbtasks=${#tasks[@]}
 	error=1
-	ended=
 	for ((n = 1; $TIMEOUT == 0 || n <= $TIMEOUT; n++)); do
 		sleep 1
-		for pid in ${tasks}; do
-			if (! kill -0 $pid 2>/dev/null) || !(echo $ended | grep -q $pid); then
-				ended+=$pid" "
+		alive=0
+		for pid in ${tasks[@]}; do
+			if kill -0 $pid 2>/dev/null; then
+				alive=$((alive + 1))
 			fi
 		done
-		if [ ${#ended[*]} == $nbtasks ]; then
+		if [ $alive == 0 ]; then
 			error=0
 			break;
 		fi
 	done
+	if [ $error != 0 ]; then
+		for pid in ${tasks[@]}; do
+			kill -9 $pid 2>/dev/null || true
+		done
+		for pid in ${tasks[@]}; do
+			wait $pid 2>/dev/null || true
+		done
+		echo "### Test KO", timeout reached
+		if [ -z $1 ]; then
+			kilfuse
+			exit 1
+		fi
+	fi
 	for ((n = 1; n <= $nmax; n++)); do
 		sleep 1
 		cmp -b $MNT/r$n $MNT/w$n || {
@@ -242,13 +254,6 @@ fuse7() {
 			fi
 		}
 	done
-	if [ $error != 0 ]; then
-		echo "### Test KO", timeout reached
-		if [ -z $1 ]; then
-			kilfuse
-			exit 1
-		fi
-	fi
 	echo "*** Test OK"
 	if [ -z $1 ]; then
 		remfuse

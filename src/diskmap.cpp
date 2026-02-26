@@ -39,7 +39,7 @@ void						dskmap::		forfat(const lbdfat_t &lbd) {
 		p < fatx_context::get()->par.fat_start + fatx_context::get()->par.fat_size;
 		p += fatx_context::get()->par.clus_size
 	) {
-		std::string &&buf = fatx_context::get()->dev.read(p, fatx_context::get()->par.clus_size);
+		byte_buffer buf = fatx_context::get()->dev.read_bytes(p, fatx_context::get()->par.clus_size);
 		for(
 			uint16_t i = static_cast<uint16_t>(p == fatx_context::get()->par.fat_start ? fatx_context::get()->par.root_clus : 0);
 			i < (fatx_context::get()->par.clus_size >> fatx_context::get()->par.chain_pow) && c < fatx_context::get()->par.clus_fat;
@@ -47,17 +47,19 @@ void						dskmap::		forfat(const lbdfat_t &lbd) {
 		)
 			lbd(c,
 				(fatx_context::get()->par.chain_size == 4) ?
-				byte_order<4>::bigend(&buf[static_cast<std::string::size_type>(i * fatx_context::get()->par.chain_size)])() :
-				byte_order<2>::bigend(&buf[static_cast<std::string::size_type>(i * fatx_context::get()->par.chain_size)])()
+				byte_order<4>::bigend(reinterpret_cast<const char*>(&buf[static_cast<byte_buffer::size_type>(i * fatx_context::get()->par.chain_size)]))() :
+				byte_order<2>::bigend(reinterpret_cast<const char*>(&buf[static_cast<byte_buffer::size_type>(i * fatx_context::get()->par.chain_size)]))()
 			);
 	}
 }
 dskmap::memnext_t::lkval_t  dskmap::		real_read(clusptr p, size_t s) {
 	memnext_t::lkval_t res;
 	s = std::min<size_t>(s, fatx_context::get()->par.clus_fat - p);
-	std::string &&buf = fatx_context::get()->dev.read(clsarithm::cls2fat(p), fatx_context::get()->par.chain_size * s);
+	byte_buffer buf = fatx_context::get()->dev.read_bytes(clsarithm::cls2fat(p), fatx_context::get()->par.chain_size * s);
 	for(size_t i = 0; i < buf.size(); i += fatx_context::get()->par.chain_size) {
-		clusptr a = (fatx_context::get()->par.chain_size == 4) ? byte_order<4>::bigend(&buf[i])() : byte_order<2>::bigend(&buf[i])();
+		clusptr a = (fatx_context::get()->par.chain_size == 4) ?
+			byte_order<4>::bigend(reinterpret_cast<const char*>(&buf[i]))() :
+			byte_order<2>::bigend(reinterpret_cast<const char*>(&buf[i]))();
 		if(fatx_context::get()->par.chain_size == 2 && a == (EOC & 0xFFFF))
 			a = EOC;
 		if(a != FLK && a != EOC && a > fatx_context::get()->par.clus_fat && bad.find(p + i) == bad.end()) {
@@ -79,12 +81,18 @@ dskmap::memnext_t::lkval_t  dskmap::		real_read(clusptr p, size_t s) {
 	return res;
 }
 int							dskmap::		real_write(clusptr p, clusptr v) {
-	std::string buf(fatx_context::get()->par.chain_size, '\0');
-	if(fatx_context::get()->par.chain_size == 4)
-		buf = byte_order<4>::bigend(static_cast<byte_order<4>::value_type>(v));
-	else
-		buf = byte_order<2>::bigend(static_cast<byte_order<2>::value_type>(v));
-	return fatx_context::get()->dev.write(clsarithm::cls2fat(p), buf);
+	byte_buffer buf(static_cast<byte_buffer::size_type>(fatx_context::get()->par.chain_size), std::byte{0});
+	if(fatx_context::get()->par.chain_size == 4) {
+		std::string raw = byte_order<4>::bigend(static_cast<byte_order<4>::value_type>(v));
+		for(size_t i = 0; i < raw.size(); i++)
+			buf[i] = static_cast<std::byte>(static_cast<unsigned char>(raw[i]));
+	}
+	else {
+		std::string raw = byte_order<2>::bigend(static_cast<byte_order<2>::value_type>(v));
+		for(size_t i = 0; i < raw.size(); i++)
+			buf[i] = static_cast<std::byte>(static_cast<unsigned char>(raw[i]));
+	}
+	return fatx_context::get()->dev.write_bytes(clsarithm::cls2fat(p), byte_view(buf.data(), buf.size()));
 }
 vareas						dskmap::		getareas(clusptr orig, const lbdarea_t &lbd) {
 	if(lbd == nullptr)
@@ -161,10 +169,14 @@ clusptr						dskmap::		clsavail() {
 void						dskmap::		erase() {
 	authm.lock();
 	freegaps.clear();
-	void(fatx_context::get()->dev.write(clsarithm::cls2fat(fatx_context::get()->par.root_clus), std::string(
+	byte_buffer zeros(
 		(fatx_context::get()->par.clus_fat - fatx_context::get()->par.root_clus) * fatx_context::get()->par.chain_size,
-		'\0'
-	)));
+		std::byte{0}
+	);
+	void(fatx_context::get()->dev.write_bytes(
+		clsarithm::cls2fat(fatx_context::get()->par.root_clus),
+		byte_view(zeros.data(), zeros.size())
+	));
 	memnext.clear();
 	gapcheck();
 	authm.unlock();
@@ -433,25 +445,22 @@ int							dskmap::		resizefat(ptr_vareas o, clusptr s) {
 	}
 	return res;
 }
-void						dskmap::		change(clusptr, entry*, clusptr, status_t) {
-	console::write(std::string("Invalid call to :") + __FUNCTION__ + "\n", true);
-	exit(2);
+
+// Implémentation des méthodes de la classe fatmap
+
+							fatmap::		fatmap(const partition& par) : dskmap(par) {
 }
-dskmap::status_t			dskmap::		status(clusptr) const {
-	console::write(std::string("Invalid call to :") + __FUNCTION__ + "\n", true);
-	exit(2);
+void						fatmap::		change(clusptr, entry*, clusptr, status_t) {
 }
-entry*						dskmap::		getentry(clusptr) const {
-	console::write(std::string("Invalid call to :") + __FUNCTION__ + "\n", true);
-	exit(2);
+[[gnu::const]] dskmap::status_t	fatmap::	status(clusptr) const {
+	return disk;
 }
-void						dskmap::		fatlost() {
-	console::write(std::string("Invalid call to :") + __FUNCTION__ + "\n", true);
-	exit(2);
+[[gnu::const]] entry*			fatmap::	getentry(clusptr) const {
+	return nullptr;
 }
-void						dskmap::		fatcheck() {
-	console::write(std::string("Invalid call to :") + __FUNCTION__ + "\n", true);
-	exit(2);
+void						fatmap::		fatlost() {
+}
+void						fatmap::		fatcheck() {
 }
 std::string					dskmap::		printchain(clusptr orig) {
 	std::string res;
@@ -466,9 +475,10 @@ void						dskmap::		printgaps() const {
 	for(const auto& i: freegaps.left)
 		dbglog("{:08X}: {} cluster{} free", i.first, i.second, i.second > 1 ? "s": "");
 }
-void						dskmap::		printfat() {
-	console::write(std::string("Invalid call to :") + __FUNCTION__ + "\n", true);
-	exit(2);
+void						fatmap::		printfat() {
+	for(clusptr i = fatx_context::get()->par.root_clus; i < fatx_context::get()->par.clus_fat; i++) {
+		dbglog("0x{:08X} -> {}", i, clsarithm::clsprint(dskmap::read(i), i));
+	}
 }
 #endif
 
@@ -568,9 +578,9 @@ void						memmap::		fatcheck() {
 						}
 						else {
 							// we find the latest file number
-							for(const entry& e: lf->childs) {
+							for(const ptr_entry& e: lf->childs) {
 								unsigned int n;
-								if(sscanf(e.name, (std::string(def_fpre) + "%3d").data(), &n) == 1)
+								if(sscanf(e->name, (std::string(def_fpre) + "%3d").data(), &n) == 1)
 									fatx_context::get()->mmi.filecount = std::max<unsigned int>(fatx_context::get()->mmi.filecount, n + 1);
 							}
 						}

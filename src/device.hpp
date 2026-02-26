@@ -51,8 +51,8 @@ public:
     [[nodiscard]] int				setup();
     streamptr						size() const { return tot_size; }
     bool							modified() const { return changes; }
-    std::string						read(streamptr, size_t = blksize);
-    [[nodiscard]] int				write(streamptr, const std::string &);
+    byte_buffer                     read_bytes(streamptr, size_t = blksize);
+    [[nodiscard]] int               write_bytes(streamptr, byte_view);
     static std::string				address(streamptr);
     void							devlog(bool, streamptr, const std::string&) const;
     std::string						print(streamptr, size_t = blksize, size_t = 32);

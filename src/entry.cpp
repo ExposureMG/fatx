@@ -22,6 +22,24 @@
 
 #include <boost/tokenizer.hpp>
 
+namespace {
+
+[[nodiscard]] std::string bytes_to_raw(const byte_buffer& bytes) {
+	std::string raw(bytes.size(), '\0');
+	for(size_t idx = 0; idx < bytes.size(); idx++)
+		raw[idx] = static_cast<char>(bytes[idx]);
+	return raw;
+}
+
+[[nodiscard]] byte_buffer raw_to_bytes(const std::string& raw) {
+	byte_buffer bytes(raw.size(), std::byte{0});
+	for(size_t idx = 0; idx < raw.size(); idx++)
+		bytes[idx] = static_cast<std::byte>(static_cast<unsigned char>(raw[idx]));
+	return bytes;
+}
+
+}
+
 // Implémentation des méthodes de la classe entry
 
 							// root entry constructor
@@ -95,11 +113,18 @@
 						// recoverable entry = entry with cluster not allocated to something else
 						(cluster == 0 && !flags.dir) || (
 							cluster != 0 && fatx_context::get()->fat->dskmap::read(cluster) == FLK && (
-							typeid(fatx_context::get()->fat) != typeid(memmap*) || (
-								fatx_context::get()->fat->status(cluster) == memmap::deleted &&
-								!fatx_context::get()->fat->getentry(cluster)->flags.dir &&
-								fatx_context::get()->fat->getentry(cluster)->update.seq() < update.seq()
-							))
+								([&]() -> bool {
+									auto* mmap = dynamic_cast<memmap*>(fatx_context::get()->fat);
+									if(mmap == nullptr)
+										return true;
+									if(mmap->status(cluster) == dskmap::disk)
+										return true;
+									if(mmap->status(cluster) != dskmap::deleted)
+										return false;
+									auto* prev = mmap->getentry(cluster);
+									return prev != nullptr && !prev->flags.dir && prev->update.seq() < update.seq();
+								}())
+							)
 						)
 					) ? delwdata : (flags.dir ? invalid : delnodata)
 				)
@@ -199,9 +224,9 @@ void						entry::			opendir() {
 	}
 	streamptr mark = 0;
 	streamptr last = 0;
-	boost::ptr_vector<entry> bad;
+	std::vector<ptr_entry> bad;
 	for(clusptr clus_curr = cluster; clus_curr != EOC && clus_curr != FLK && !(mark != 0 && !fatx_context::get()->mmi.recover); clus_curr = fatx_context::get()->fat->read(clus_curr)) {
-		std::string &&buf = fatx_context::get()->dev.read(clsarithm::cls2ptr(clus_curr), fatx_context::get()->par.clus_size);
+		std::string buf = bytes_to_raw(fatx_context::get()->dev.read_bytes(clsarithm::cls2ptr(clus_curr), fatx_context::get()->par.clus_size));
 		for(size_t i = 0; i < fatx_context::get()->par.clus_size && !(mark != 0 && !fatx_context::get()->mmi.recover); i += ent_size) {
 			entry *ent = new entry(clsarithm::cls2ptr(clus_curr) + i, &buf[i]);
 			ent->parent = this;
@@ -210,11 +235,11 @@ void						entry::			opendir() {
 			ent->mux_E.name(mutex_entr + ent->path());
 			if(ent->status == end) {
 				mark = ent->loc;
-				for(entry& j: bad)
-					j.status = delnodata;
+				for(ptr_entry& j: bad)
+					j->status = delnodata;
 			}
 			if(ent->status == invalid && mark == 0) {
-				bad.push_back(ent);
+				bad.emplace_back(ent);
 				ent = nullptr;
 				continue;
 			}
@@ -230,20 +255,20 @@ void						entry::			opendir() {
 			}
 			last = ent->loc;
 			if(mark == 0) {
-				for(entry& j: bad)
-					j.status = delnodata;
+				for(ptr_entry& j: bad)
+					j->status = delnodata;
 			}
 			#ifndef NDEBUG
 				dbglog(ent->print());
 			#endif
 			if(ent->status == valid) {
-				for(entry& e: childs) {
-					if(e.status == valid && ent->namesize == e.namesize && strncmp(ent->name, e.name, ent->namesize) == 0) {
+				for(ptr_entry& e: childs) {
+					if(e->status == valid && ent->namesize == e->namesize && strncmp(ent->name, e->name, ent->namesize) == 0) {
 						// duplicate reference case
 						if(fatx_context::get()->mmi.prog != frontend::fsck && !fatx_context::get()->mmi.recover)
 							console::write("Duplicate reference in same directory {} for entry {}.\n", fatx_context::get()->mmi.dialog, path(), ent->name);
 						ent->status = duplicate;
-						e.status = duplicate;
+						e->status = duplicate;
 						break;
 					}
 				}
@@ -260,7 +285,7 @@ void						entry::			opendir() {
 							if(fatx_context::get()->mmi.prog == frontend::fsck) {
 								console::write(" Remove it ?", fatx_context::get()->mmi.dialog);
 								if(fatx_context::get()->mmi.getanswer(true)) {
-									childs.push_back(ent);
+									childs.emplace_back(ent);
 									remfrdir(ent);
 									ent = nullptr;
 									break;
@@ -277,11 +302,11 @@ void						entry::			opendir() {
 				if(ent == nullptr)
 					continue;
 			}
-			childs.push_back(ent);
+			childs.emplace_back(ent);
 			ent = nullptr;
-			if(childs.back().flags.dir && childs.back().status != delnodata) {
+			if(childs.back()->flags.dir && childs.back()->status != delnodata) {
 				// go one step deep
-				childs.back().opendir();
+				childs.back()->opendir();
 			}
 		}
 	}
@@ -308,9 +333,9 @@ void						entry::			opendir() {
 					if(entry(mark).write())
 						return;
 				}
-				for(entry& i: bad) {
-					if(i.status == delnodata)
-						if(i.write())
+				for(ptr_entry& i: bad) {
+					if(i->status == delnodata)
+						if(i->write())
 							return;
 				}
 			}
@@ -343,9 +368,9 @@ int							entry::			addtodir(entry *e) {
 	}
 	mux_E.lock();
 	mux_D.lock();
-	for(const entry& i: childs) {
-		if(i.namesize == e->namesize && strncmp(i.name, e->name, i.namesize) == 0 && (
-			i.status == entry::valid || (fatx_context::get()->mmi.recover && i.status == entry::delwdata)
+	for(const ptr_entry& i: childs) {
+		if(i->namesize == e->namesize && strncmp(i->name, e->name, i->namesize) == 0 && (
+			i->status == entry::valid || (fatx_context::get()->mmi.recover && i->status == entry::delwdata)
 		)) {
 			mux_D.unlock();
 			mux_E.unlock();
@@ -356,13 +381,15 @@ int							entry::			addtodir(entry *e) {
 	streamptr endp = 0;
 	streamptr del = 0;
 	for(clusptr i = cluster; endp == 0 && i != EOC && i != FLK; i = fatx_context::get()->fat->read(i)) {
-		std::string &&buf = fatx_context::get()->dev.read(clsarithm::cls2ptr(i), fatx_context::get()->par.clus_size);
+		byte_buffer buf = fatx_context::get()->dev.read_bytes(clsarithm::cls2ptr(i), fatx_context::get()->par.clus_size);
 		for(size_t j = 0; j < fatx_context::get()->par.clus_size; j += ent_size) {
-			if((buf[j] == EOD && buf[j + 1] == EOD) || (buf[j] == 0 && buf[j + 1] == 0)) {
+			const auto first = static_cast<unsigned char>(buf[j]);
+			const auto second = static_cast<unsigned char>(buf[j + 1]);
+			if((first == static_cast<unsigned char>(EOD) && second == static_cast<unsigned char>(EOD)) || (first == 0 && second == 0)) {
 				endp = clsarithm::cls2ptr(i) + j;
 				break;
 			}
-			if(del == 0 && static_cast<unsigned char>(buf[j]) == deleted_size)
+			if(del == 0 && first == deleted_size)
 				del = clsarithm::cls2ptr(i) + j;
 		}
 	}
@@ -405,7 +432,7 @@ int							entry::			addtodir(entry *e) {
 			}
 	}
 	e->parent = this;
-	childs.push_back(e);
+	childs.emplace_back(e);
 	if((res = e->write())) {
 		mux_D.unlock();
 		mux_E.unlock();
@@ -427,7 +454,7 @@ void						entry::			remfrdir(entry *e) {
 		return;
 	}
 	while(!e->childs.empty())
-		e->remfrdir(&e->childs.front());
+		e->remfrdir(e->childs.front().get());
 	mux_D.lock();
 	if(e->cluster != FLK)
 		fatx_context::get()->fat->freefat(e->cluster);
@@ -437,9 +464,9 @@ void						entry::			remfrdir(entry *e) {
 		mux_E.unlock();
 		return;
 	}
-	auto i = find_if(childs.begin(), childs.end(), [e] (const entry& a) -> bool { return &a == e; });
+	auto i = find_if(childs.begin(), childs.end(), [e] (const ptr_entry& a) -> bool { return a.get() == e; });
 	assert(i != childs.end());
-	delete childs.release(i).release();
+	childs.erase(i);
 	touch(false, false, true);
 	void(write(true));
 	mux_D.unlock();
@@ -457,20 +484,20 @@ entry*						entry::			find(const char *path) {
 	for(const std::string &d : dirs) {
 		found = false;
 		res->mux_E.lock_shared();
-		for(entry& e: res->childs) {
-			if(e.status == entry::valid && ((fatx_context::get()->mmi.cutname) ? e.name == d.substr(0, name_size) : e.name == d)) {
+		for(ptr_entry& e: res->childs) {
+			if(e->status == entry::valid && ((fatx_context::get()->mmi.cutname) ? e->name == d.substr(0, name_size) : e->name == d)) {
 				found = true;
 				res->mux_E.unlock_shared();
-				res	= &e;
+				res	= e.get();
 				break;
 			}
 		}
 		if(!found && fatx_context::get()->mmi.recover) {
-			for(entry& e: res->childs) {
-				if(e.name == d.substr(0, name_size)) {
+			for(ptr_entry& e: res->childs) {
+				if(e->name == d.substr(0, name_size)) {
 					found = true;
 					res->mux_E.unlock_shared();
-					res	= &e;
+					res	= e.get();
 					break;
 				}
 			}
@@ -508,7 +535,8 @@ int							entry::			write(bool l) {
 		access.write(reinterpret_cast<unsigned char*>(&buf[0x38]));
 		update.write(reinterpret_cast<unsigned char*>(&buf[0x3C]));
 	}
-	int res = loc == 0 ? 0 : fatx_context::get()->dev.write(loc, buf);
+	byte_buffer raw = raw_to_bytes(buf);
+	int res = loc == 0 ? 0 : fatx_context::get()->dev.write_bytes(loc, byte_view(raw.data(), raw.size()));
 	if(l && parent != nullptr && parent != this)
 		parent->mux_D.unlock();
 	return res;
@@ -545,11 +573,12 @@ int							entry::			rename(const char *n) {
 			oldpar->mux_D.lock();
 			status = delwdata;
 			oldpar->mux_E.lock_shared();
-			auto i = find_if(oldpar->childs.begin(), oldpar->childs.end(), [this] (const entry& a) -> bool { return &a == this; });
+			auto i = find_if(oldpar->childs.begin(), oldpar->childs.end(), [this] (const ptr_entry& a) -> bool { return a.get() == this; });
 			assert(i != oldpar->childs.end());
 			oldpar->mux_E.unlock_shared();
 			oldpar->mux_E.lock();
-			auto me = oldpar->childs.release(i);
+			entry* me = i->release();
+			oldpar->childs.erase(i);
 			oldpar->mux_E.unlock();
 			int res = 0;
 			if((res = write())) {
@@ -564,12 +593,12 @@ int							entry::			rename(const char *n) {
 				return res;
 			}
 			status = valid;
-			if((res = newpar->addtodir(me.get()))) {
-				me.release();
+			if((res = newpar->addtodir(me))) {
+				oldpar->childs.emplace_back(me);
+				parent = oldpar;
 				mux_E.unlock();
 				return res;
 			}
-			me.release();
 		}
 	}
 	memset(name, '\0', name_size + 1);
@@ -608,10 +637,10 @@ void						entry::			recover() {
 			console::write("Can't restore file. Another valid file with same name exists in this directory.\n", true);
 		}
 		else {
-			std::string &&buf = fatx_context::get()->dev.read(clsarithm::cls2ptr(clsarithm::ptr2cls(loc)), fatx_context::get()->par.clus_size);
+			byte_buffer buf = fatx_context::get()->dev.read_bytes(clsarithm::cls2ptr(clsarithm::ptr2cls(loc)), fatx_context::get()->par.clus_size);
 			streamptr mark = 0;
 			for(size_t i = 0; i < buf.size(); i+= ent_size) {
-				if(buf[i] == EOD) {
+				if(static_cast<unsigned char>(buf[i]) == static_cast<unsigned char>(EOD)) {
 					mark = clsarithm::cls2ptr(clsarithm::ptr2cls(loc)) + i;
 					break;
 				}
@@ -622,9 +651,11 @@ void						entry::			recover() {
 				no.status = delwdata;
 				if(no.write())
 					return;
-				for(size_t i = mark + ent_size; i < clsarithm::cls2ptr(clsarithm::ptr2cls(loc)) + fatx_context::get()->par.clus_size; i+= ent_size)
-					if(fatx_context::get()->dev.write(i, std::string(1, static_cast<char>(deleted_size))))
+				for(size_t i = mark + ent_size; i < clsarithm::cls2ptr(clsarithm::ptr2cls(loc)) + fatx_context::get()->par.clus_size; i+= ent_size) {
+					std::byte deleted = static_cast<std::byte>(deleted_size);
+					if(fatx_context::get()->dev.write_bytes(i, byte_view(&deleted, 1)))
 						return;
+				}
 			}
 			status = entry::valid;
 			if(write())
@@ -743,8 +774,10 @@ bool						entry::			analyse(pass_t step, const std::string &header) {
 			if(fatx_context::get()->mmi.prog == frontend::fsck) {
 				console::write(" Remove it ?", fatx_context::get()->mmi.dialog);
 				if(fatx_context::get()->mmi.getanswer(true)) {
-					assert(parent != nullptr);
-					parent->remfrdir(this);
+					status = delnodata;
+					cluster = FLK;
+					if(write())
+						return false;
 				}
 			}
 			else {
@@ -768,8 +801,10 @@ bool						entry::			analyse(pass_t step, const std::string &header) {
 				if(status == duplicate) {
 					console::write(" Remove it ?", fatx_context::get()->mmi.dialog);
 					if(fatx_context::get()->mmi.getanswer(true)) {
-						assert(parent != nullptr);
-						parent->remfrdir(this);
+						status = delnodata;
+						cluster = FLK;
+						if(write())
+							return false;
 						return false;
 					}
 				}
@@ -799,9 +834,12 @@ bool						entry::			analyse(pass_t step, const std::string &header) {
 				console::write(" Remove {} (part of the other one) ?", path().data(), fatx_context::get()->mmi.dialog);
 				if(fatx_context::get()->mmi.getanswer(true)) {
 					if(cluster != s->cluster) {
-						assert(parent != nullptr);
+						if(cluster != FLK)
+							fatx_context::get()->fat->freefat(cluster);
+						status = delnodata;
 						cluster = FLK;
-						parent->remfrdir(this);
+						if(write())
+							return false;
 					}
 					else {
 						status = delnodata;
@@ -818,10 +856,10 @@ bool						entry::			analyse(pass_t step, const std::string &header) {
 			return false;
 		}
 		if(status == duplicate) {
-			auto e = find_if(parent->childs.begin(), parent->childs.end(), [this] (const entry& i) -> bool { return namesize == i.namesize && strncmp(name, i.name, namesize) == 0; });
-			if(e == parent->childs.end() || (e->status != duplicate && e->status != validupl))
+			auto e = find_if(parent->childs.begin(), parent->childs.end(), [this] (const ptr_entry& i) -> bool { return namesize == i->namesize && strncmp(name, i->name, namesize) == 0; });
+			if(e == parent->childs.end() || ((*e)->status != duplicate && (*e)->status != validupl))
 				status = valid;		// problem already solved
-			else if(e->status == duplicate)
+			else if((*e)->status == duplicate)
 				status = validupl;	// waiting for analysis of the other entry
 			else {
 				// both entries are valid and different
@@ -886,9 +924,9 @@ bool						entry::			analyse(pass_t step, const std::string &header) {
 		}
 	}
 	if(flags.dir) {
-		for(entry& ent: childs) {
+		for(ptr_entry& ent: childs) {
 			// we go one step deeper
-			recovered = ent.analyse(step, header + name + sepdir) || recovered;
+			recovered = ent->analyse(step, header + name + sepdir) || recovered;
 		}
 	}
 	if(recovered && flags.dir && status != valid && !fatx_context::get()->mmi.local) {
@@ -951,10 +989,14 @@ int							entry::			data(char *buf, bool r, filesize offset, filesize s) {
 				return EFAULT;
 		}
 		for(const area& i: areas->sub(s, offset)) {
-			if(r)
-				memcpy(buf + i.offset - offset, fatx_context::get()->dev.read(i.pointer, i.size).data(), i.size);
+			if(r) {
+				byte_buffer raw = fatx_context::get()->dev.read_bytes(i.pointer, i.size);
+				for(size_t idx = 0; idx < i.size; idx++)
+					buf[i.offset - offset + idx] = static_cast<char>(raw[idx]);
+			}
 			else {
-				if((res = fatx_context::get()->dev.write(i.pointer, std::string(buf + i.offset - offset, i.size))))
+				const auto* first = reinterpret_cast<const std::byte*>(buf + i.offset - offset);
+				if((res = fatx_context::get()->dev.write_bytes(i.pointer, byte_view(first, i.size))))
 					return res;
 			}
 		}

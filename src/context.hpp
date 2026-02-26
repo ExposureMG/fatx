@@ -25,6 +25,8 @@
 #include "entry.hpp"
 #include "fuse_ops.hpp"
 
+#include <cassert>
+
 #ifndef PACKAGE_VERSION
 	#define PACKAGE_VERSION "1.18"
 #endif
@@ -54,34 +56,46 @@ public:
 
 namespace clsarithm {
 
+inline fatx_context*                require_context();
+
 inline clusptr						siz2cls(filesize);
 inline streamptr					cls2ptr(clusptr );
 inline clusptr						ptr2cls(streamptr);
 inline streamptr					cls2fat(clusptr);
 inline std::string					clsprint(clusptr, clusptr);
 
+inline fatx_context*                require_context() {
+	auto* ctx = fatx_context::get();
+	assert(ctx != nullptr);
+	return ctx;
+}
+
 inline clusptr						siz2cls(filesize s) {
+	auto* const ctx = require_context();
 	return
-		(s >> fatx_context::get()->par.clus_pow) +
-		(s % fatx_context::get()->par.clus_size != 0 ? 1 : 0)
+		(s >> ctx->par.clus_pow) +
+		(s % ctx->par.clus_size != 0 ? 1 : 0)
 	;
 }
 inline streamptr					cls2ptr(clusptr p) {
-	if (p < fatx_context::get()->par.root_clus || p > fatx_context::get()->par.clus_fat) {
+	auto* const ctx = require_context();
+	if (p < ctx->par.root_clus || p > ctx->par.clus_fat) {
 		console::write("Cluster pointer in data out of bounds (0x{:08X}).\n", true, p);
 		return 0;
 	}
-	return fatx_context::get()->par.root_start + (p - 1) * fatx_context::get()->par.clus_size;
+	return ctx->par.root_start + (p - 1) * ctx->par.clus_size;
 }
 inline clusptr						ptr2cls(streamptr p) {
-	return ((p - fatx_context::get()->par.root_start) >> fatx_context::get()->par.clus_pow) + 1;
+	auto* const ctx = require_context();
+	return ((p - ctx->par.root_start) >> ctx->par.clus_pow) + 1;
 }
 inline streamptr					cls2fat(clusptr p) {
-	if(p < fatx_context::get()->par.root_clus || p > fatx_context::get()->par.clus_fat) {
+	auto* const ctx = require_context();
+	if(p < ctx->par.root_clus || p > ctx->par.clus_fat) {
 		console::write("Cluster pointer in FAT out of bounds (0x{:08X}).\n", true, p);
 		return 0;
 	}
-	return fatx_context::get()->par.fat_start + p * fatx_context::get()->par.chain_size;
+	return ctx->par.fat_start + p * ctx->par.chain_size;
 }
 inline std::string					clsprint(clusptr p, clusptr r) {
 	return (p == r + 1) ? "next" : ((p == FLK) ? "free" : ((p == EOC) ? "end" : std::format("0x{:08X}", p)));

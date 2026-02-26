@@ -3,9 +3,31 @@
 #include <filesystem>
 #include <cstdlib>
 #include <cstring>
+#include <cstddef>
+#include <vector>
+#include <string_view>
 #include <unistd.h>
 #include <stdexcept>
 #include "context.hpp"
+
+static std::string dev_read(device* dev, streamptr offset, size_t size)
+{
+    const auto data = dev->read_bytes(offset, size);
+    std::string result;
+    result.reserve(data.size());
+    for (std::byte b : data)
+        result.push_back(static_cast<char>(b));
+    return result;
+}
+
+static int dev_write(device* dev, streamptr offset, std::string_view data)
+{
+    std::vector<std::byte> bytes;
+    bytes.reserve(data.size());
+    for (char c : data)
+        bytes.push_back(static_cast<std::byte>(static_cast<unsigned char>(c)));
+    return dev->write_bytes(offset, byte_view(bytes.data(), bytes.size()));
+}
 
 // Classe pour gérer le contexte de test
 class DeviceDirectTest : public ::testing::Test {
@@ -81,17 +103,17 @@ TEST_F(DeviceDirectTest, Read_VariousSizes_ReturnsCorrectData) {
     ASSERT_EQ(setup_result, 0);
 
     // Test lecture de 0 octets
-    auto zero_read = dev->read(0, 0);
+    auto zero_read = dev_read(dev.get(), 0, 0);
     EXPECT_TRUE(zero_read.empty());
 
     // Test lecture de quelques octets
     const size_t read_size = 10;
-    auto small_read = dev->read(0, read_size);
+    auto small_read = dev_read(dev.get(), 0, read_size);
     EXPECT_EQ(small_read.size(), read_size);
     EXPECT_EQ(small_read, test_data.substr(0, read_size));
 
     // Test lecture de toute la taille disponible
-    auto full_read = dev->read(0, test_data.size());
+    auto full_read = dev_read(dev.get(), 0, test_data.size());
     EXPECT_EQ(full_read.size(), test_data.size());
     EXPECT_EQ(full_read, test_data);
 }
@@ -104,7 +126,7 @@ TEST_F(DeviceDirectTest, Read_WithOffset_ReturnsCorrectData) {
 
     const size_t offset = 100;
     const size_t read_size = 50;
-    auto offset_read = dev->read(offset, read_size);
+    auto offset_read = dev_read(dev.get(), offset, read_size);
     EXPECT_EQ(offset_read.size(), read_size);
     EXPECT_EQ(offset_read, test_data.substr(offset, read_size));
 }
@@ -116,7 +138,7 @@ TEST_F(DeviceDirectTest, Read_OutOfBounds_ReturnsEmpty) {
     ASSERT_EQ(setup_result, 0);
 
     // Essayer de lire au-delà de la taille du fichier
-    auto out_of_bounds = dev->read(test_data.size(), 10);
+    auto out_of_bounds = dev_read(dev.get(), test_data.size(), 10);
     EXPECT_TRUE(out_of_bounds.empty());
 }
 
@@ -127,9 +149,9 @@ TEST_F(DeviceDirectTest, Write_ReadOnlyMode_ReturnsZero) {
     ASSERT_EQ(setup_result, 0);
 
     // Le device est en mode lecture/écriture (writeable() retourne true par défaut)
-    // Donc le write() devrait réussir et marquer modified()
+    // Donc dev_write() (via write_bytes()) devrait réussir et marquer modified()
     std::string write_data = "test write";
-    int result = dev->write(0, write_data);
+    int result = dev_write(dev.get(), 0, write_data);
     EXPECT_EQ(result, 0); // Devrait réussir
     EXPECT_TRUE(dev->modified()); // Devrait être marqué comme modifié
 }
@@ -141,7 +163,7 @@ TEST_F(DeviceDirectTest, Write_EmptyData_ReturnsZero) {
     ASSERT_EQ(setup_result, 0);
 
     std::string empty_data = "";
-    int result = dev->write(0, empty_data);
+    int result = dev_write(dev.get(), 0, empty_data);
     EXPECT_EQ(result, 0);
 }
 
@@ -255,7 +277,7 @@ TEST_F(DeviceDirectTest, Read_PartialBeyondEnd) {
     // Demander plus que disponible à la fin du fichier
     const size_t offset = test_data.size() - 5;
     const size_t read_size = 20; // Demander plus que disponible
-    auto partial_read = dev->read(offset, read_size);
+    auto partial_read = dev_read(dev.get(), offset, read_size);
     
     EXPECT_LE(partial_read.size(), read_size);
     EXPECT_GE(partial_read.size(), 0);
@@ -269,8 +291,8 @@ TEST_F(DeviceDirectTest, Write_MultipleWrites) {
     std::string write_data1 = "first";
     std::string write_data2 = "second";
     
-    int result1 = dev->write(0, write_data1);
-    int result2 = dev->write(10, write_data2);
+    int result1 = dev_write(dev.get(), 0, write_data1);
+    int result2 = dev_write(dev.get(), 10, write_data2);
     
     EXPECT_EQ(result1, 0);
     EXPECT_EQ(result2, 0);
@@ -282,7 +304,7 @@ TEST_F(DeviceDirectTest, Read_AtExactEnd) {
     ASSERT_EQ(setup_result, 0);
 
     // Lire exactement jusqu'à la fin
-    auto end_read = dev->read(test_data.size() - 1, 1);
+    auto end_read = dev_read(dev.get(), test_data.size() - 1, 1);
     EXPECT_EQ(end_read.size(), 1);
 }
 
@@ -293,23 +315,23 @@ TEST_F(DeviceDirectTest, Modified_AfterMultipleWrites) {
     std::string write_data = "test";
     
     EXPECT_FALSE(dev->modified());
-    int write_result1 = dev->write(0, write_data);
+    int write_result1 = dev_write(dev.get(), 0, write_data);
     EXPECT_EQ(write_result1, 0);
     EXPECT_TRUE(dev->modified());
     
-    // Le flag devrait rester true après un autre write
-    int write_result2 = dev->write(5, write_data);
+    // L'indicateur doit rester à true après une autre écriture
+    int write_result2 = dev_write(dev.get(), 5, write_data);
     EXPECT_EQ(write_result2, 0);
     EXPECT_TRUE(dev->modified());
 }
 
-// Additional tests for better device coverage
+// Tests additionnels pour améliorer la couverture device
 TEST_F(DeviceDirectTest, Read_LargeSize) {
     int setup_result = dev->setup();
     ASSERT_EQ(setup_result, 0);
 
     // Tenter de lire une très grande taille
-    auto large_read = dev->read(0, 1000000);
+    auto large_read = dev_read(dev.get(), 0, 1000000);
     // Devrait lire jusqu'à la fin du fichier
     EXPECT_LE(large_read.size(), test_data.size());
 }
@@ -319,9 +341,9 @@ TEST_F(DeviceDirectTest, Write_ConsecutiveOffsets) {
     ASSERT_EQ(setup_result, 0);
 
     // Écrire à différents offsets
-    int res1 = dev->write(0, "A");
-    int res2 = dev->write(100, "B");
-    int res3 = dev->write(500, "C");
+    int res1 = dev_write(dev.get(), 0, "A");
+    int res2 = dev_write(dev.get(), 100, "B");
+    int res3 = dev_write(dev.get(), 500, "C");
 
     EXPECT_EQ(res1, 0);
     EXPECT_EQ(res2, 0);
@@ -425,10 +447,10 @@ TEST_F(DeviceDiffTest, Write_ToDiffFile) {
     
     // Écrire des données
     std::string new_data = "MODIFIED";
-    ASSERT_EQ(dev->write(0, new_data), 0);
+    ASSERT_EQ(dev_write(dev.get(), 0, new_data), 0);
     
     // Lire pour vérifier
-    EXPECT_EQ(dev->read(0, 8), "MODIFIED");
+    EXPECT_EQ(dev_read(dev.get(), 0, 8), "MODIFIED");
     
     // Vérifier que le fichier original n'a pas changé
     std::ifstream ifs(main_file, std::ios::binary);
@@ -440,7 +462,7 @@ TEST_F(DeviceDiffTest, Write_ToDiffFile) {
 TEST_F(DeviceDiffTest, Read_FromDiffFileAfterReload) {
     // 1. Premier setup et écriture
     ASSERT_EQ(dev->setup(), 0);
-    ASSERT_EQ(dev->write(4, "XXXX"), 0);
+    ASSERT_EQ(dev_write(dev.get(), 4, "XXXX"), 0);
     dev.reset(); // Ferme les fichiers
 
     // 2. Second setup (recharger le diff)
@@ -448,7 +470,7 @@ TEST_F(DeviceDiffTest, Read_FromDiffFileAfterReload) {
     ASSERT_EQ(dev->setup(), 0);
     
     // Devrait lire ORIG au début et XXXX à partir de l'offset 4
-    EXPECT_EQ(dev->read(0, 8), "ORIGXXXX");
+    EXPECT_EQ(dev_read(dev.get(), 0, 8), "ORIGXXXX");
 }
 
 TEST_F(DeviceDiffTest, Load_DuplicateSegment_Fails) {
@@ -555,10 +577,10 @@ TEST_F(DeviceUSBTest, Read_USB_Data) {
     streamptr s0 = std::filesystem::file_size(usb_root + "/Data0000");
     streamptr s1 = std::filesystem::file_size(usb_root + "/Data0001");
     
-    auto r1 = dev->read(s0, 5);
+    auto r1 = dev_read(dev.get(), s0, 5);
     EXPECT_EQ(r1, "DATA1");
     
-    auto r2 = dev->read(s0 + s1, 4);
+    auto r2 = dev_read(dev.get(), s0 + s1, 4);
     EXPECT_EQ(r2, "2222");
 }
 
@@ -612,8 +634,8 @@ TEST_F(DeviceUSBTest, Write_USB_WithDiffFile) {
     
     ASSERT_EQ(dev->setup(), 0);
     
-    ASSERT_EQ(dev->write(0, "USBMOD"), 0);
-    EXPECT_EQ(dev->read(0, 6), "USBMOD");
+    ASSERT_EQ(dev_write(dev.get(), 0, "USBMOD"), 0);
+    EXPECT_EQ(dev_read(dev.get(), 0, 6), "USBMOD");
     
     dev.reset();
     std::filesystem::remove(diff_file);
@@ -624,52 +646,52 @@ TEST_F(DeviceDirectTest, Device_Simple_ReadWrite_Flow) {
     ASSERT_EQ(result, 0);
     
     std::string my_test_data = "TEST";
-    int write_res = dev->write(0, my_test_data);
+    int write_res = dev_write(dev.get(), 0, my_test_data);
     EXPECT_EQ(write_res, 0);
     
-    auto read_res = dev->read(0, 4);
+    auto read_res = dev_read(dev.get(), 0, 4);
     EXPECT_EQ(read_res.size(), 4u);
 }
 
 TEST_F(DeviceDirectTest, Device_ZeroRead) {
     ASSERT_EQ(dev->setup(), 0);
-    auto res = dev->read(0, 0);
+    auto res = dev_read(dev.get(), 0, 0);
     EXPECT_EQ(res.size(), 0u);
 }
 
 TEST_F(DeviceDirectTest, Device_LargeOffsetRead) {
     ASSERT_EQ(dev->setup(), 0);
-    auto res = dev->read(dev->size() + 1000, 100);
+    auto res = dev_read(dev.get(), dev->size() + 1000, 100);
     EXPECT_EQ(res.size(), 0u);
 }
-// Couvre L375-376 : write() quand p + s.size() > size() → EOVERFLOW
+// Couvre L375-376 : dev_write()/write_bytes quand p + s.size() > size() → EOVERFLOW
 TEST_F(DeviceDirectTest, Write_BeyondEndReturnsEOVERFLOW) {
     ASSERT_EQ(dev->setup(), 0);
-    // device size = 1024. écriture à offset 900 avec 200 bytes → 900+200=1100 > 1024
+    // Taille device = 1024. écriture à offset 900 avec 200 octets → 900+200=1100 > 1024
     std::string data(200, 'X');
-    int res = dev->write(dev->size() - 50, data); // 1024-50=974, 974+200=1174 > 1024
+    int res = dev_write(dev.get(), dev->size() - 50, data); // 1024-50=974, 974+200=1174 > 1024
     EXPECT_EQ(res, EOVERFLOW);
 }
 
-// Couvre L379 : write() quand !writeable() → return 0 immédiatement
+// Couvre L379 : dev_write()/write_bytes quand !writeable() → retourne 0 immédiatement
 TEST_F(DeviceDirectTest, Write_NotWriteable_ReturnsZero) {
     ASSERT_EQ(dev->setup(), 0);
     auto ctx = fatx_context::get();
     // Rendre le contexte en mode non-écrivable via set_readonly
     ctx->mmi.set_readonly(true);
     std::string data = "test";
-    // writeable() = !readonly → false → return 0 immédiatement (L379)
-    int res = dev->write(0, data);
+    // writeable() = !readonly → false → retourne 0 immédiatement (L379)
+    int res = dev_write(dev.get(), 0, data);
     ctx->mmi.set_readonly(false);
     EXPECT_EQ(res, 0);
 }
 
-// Couvre L333 : read() avec iod.is_open() = true (mode diffile read-only)
+// Couvre L333 : dev_read()/read_bytes avec iod.is_open() = true (mode diffile read-only)
 // iod.is_open() est vrai quand diffile est configuré + readonly=true → pas de close/reopen
 TEST_F(DeviceDiffTest, Read_WithDiffFile_ReadOnly) {
     // 1. Créer un diffile avec des données via un setup en écriture d'abord
     ASSERT_EQ(dev->setup(), 0);
-    ASSERT_EQ(dev->write(0, "DIFFMOD1"), 0);  // Écrire dans le diffile
+    ASSERT_EQ(dev_write(dev.get(), 0, "DIFFMOD1"), 0);  // Écrire dans le diffile
     dev.reset(); // Fermer le device
 
     // 2. Recharger en mode read-only → iod ouvert en std::ios::in sans close/reopen
@@ -677,19 +699,19 @@ TEST_F(DeviceDiffTest, Read_WithDiffFile_ReadOnly) {
     fatx_context::get()->mmi.set_readonly(true);
     ASSERT_EQ(dev->setup(), 0);
     // iod.is_open() = true maintenant (fichier diff chargé en mode read-only)
-    // L333 doit être exécuté lors de read()
-    auto res = dev->read(0, 8);
+    // L333 doit être exécuté lors de dev_read()/read_bytes
+    auto res = dev_read(dev.get(), 0, 8);
     // Les données du diffile sont superposées sur le fichier main lors de la lecture
     EXPECT_EQ(res, "DIFFMOD1");
     fatx_context::get()->mmi.set_readonly(false);
 }
 
-// Couvre L370 : read() avec iod.is_open()=true mais chgf.read() retourne true (erreur)
+// Couvre L370 : dev_read()/read_bytes avec iod.is_open()=true mais chgf.read() retourne true (erreur)
 // Pour provoquer l'erreur de lecture du diffile, corrompre le diffile après setup
 TEST_F(DeviceDiffTest, Read_DiffFileReadFail_ReturnsEmpty) {
     // 1. Préparer un diffile valide
     ASSERT_EQ(dev->setup(), 0);
-    ASSERT_EQ(dev->write(0, "DIFFSTUF"), 0);  // écrire un segment dans le diff
+    ASSERT_EQ(dev_write(dev.get(), 0, "DIFFSTUF"), 0);  // écrire un segment dans le diff
     dev.reset();
 
     // 2. Corrompre le diffile (tronquer après le header pour corrompre les données du segment)
@@ -711,7 +733,7 @@ TEST_F(DeviceDiffTest, Read_DiffFileReadFail_ReturnsEmpty) {
     // La lecture du segment à une position correcte fonctionne - essayons un offset différent
     // pour que la lecture échoue (position data au-delà de la fin du fichier)
     // En réalité, avec les données correctes, la lecture passera. Vérifions juste L333 est exécuté.
-    auto res = dev->read(0, 8);
+    auto res = dev_read(dev.get(), 0, 8);
     fatx_context::get()->mmi.set_readonly(false);
     EXPECT_EQ(res.size(), 8u);
 }
@@ -723,12 +745,12 @@ TEST_F(DeviceDiffTest, Read_DiffFileReadFail_ReturnsEmpty) {
 TEST_F(DeviceDiffTest, Write_PastSegment_CoversL109) {
     ASSERT_EQ(dev->setup(), 0);
     // Écrire "ABCD" à offset 0 → segment {p=0, size=4}
-    ASSERT_EQ(dev->write(0, "ABCD"), 0);
+    ASSERT_EQ(dev_write(dev.get(), 0, "ABCD"), 0);
     // Écrire "EFGH" à offset 8 (après la fin du segment [0..4))
     // lower_bound(8) = end(), b != begin(), b == end() → b--
     // b = {0: size=4}, b->first(0) + size(4) = 4 <= 8 → b++ (L109) → b = end() → addseg
-    ASSERT_EQ(dev->write(8, "EFGH"), 0);
-    auto res = dev->read(0, 12);
+    ASSERT_EQ(dev_write(dev.get(), 8, "EFGH"), 0);
+    auto res = dev_read(dev.get(), 0, 12);
     EXPECT_EQ(res.size(), 12u);
 }
 
@@ -740,12 +762,12 @@ TEST_F(DeviceDiffTest, Write_PastSegment_CoversL109) {
 TEST_F(DeviceDiffTest, Write_BeforeSegment_CoversL118) {
     ASSERT_EQ(dev->setup(), 0);
     // Écrire "EFGH" à offset 8 → segment {p=8, size=4}
-    ASSERT_EQ(dev->write(8, "EFGH"), 0);
+    ASSERT_EQ(dev_write(dev.get(), 8, "EFGH"), 0);
     // Écrire "ABCD" à offset 0 (avant le segment existant)
     // lower_bound(0) → b pointe sur {8,4}, b == begin(), L106 condition FALSE
     // puis: b->first(8) > l(0) → L117 TRUE → addseg gap [0..4) couvert (L118-121)
-    ASSERT_EQ(dev->write(0, "ABCD"), 0);
-    auto res = dev->read(0, 12);
+    ASSERT_EQ(dev_write(dev.get(), 0, "ABCD"), 0);
+    auto res = dev_read(dev.get(), 0, 12);
     EXPECT_EQ(res.size(), 12u);
 }
 
@@ -760,7 +782,7 @@ TEST_F(DeviceUSBTest, Read_USB_MidSegment_CoversL338) {
     streamptr s0 = std::filesystem::file_size(usb_root + "/Data0000");
     // S'assurer que Data0000 est plus grande que 100 octets
     if(s0 > 100) {
-        auto r = dev->read(100, 4);
+        auto r = dev_read(dev.get(), 100, 4);
         EXPECT_EQ(r.size(), 4u);
     }
     EXPECT_TRUE(true);
@@ -771,10 +793,10 @@ TEST_F(DeviceUSBTest, Write_USB_Direct) {
     // Pas de diffile configuré, writeable=true → écriture directe dans usbd
     ASSERT_EQ(dev->setup(), 0);
     // Écrire à offset 0 (dans Data0000)
-    int res = dev->write(0, "USBDIRWT");
+    int res = dev_write(dev.get(), 0, "USBDIRWT");
     EXPECT_EQ(res, 0);
     // Vérifier via read
-    auto r = dev->read(0, 8);
+    auto r = dev_read(dev.get(), 0, 8);
     EXPECT_EQ(r, "USBDIRWT");
 }
 

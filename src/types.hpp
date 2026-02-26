@@ -18,11 +18,16 @@
  */
 
 #include <cstdint>
+#include <cstddef>
 #include <memory>
+#include <span>
+#include <vector>
 
 using streamptr = uint64_t;  		// pointers in device
 using clusptr = uint64_t;    		// cluster numbers
 using filesize = uint64_t;   		// file size
+using byte_buffer = std::vector<std::byte>;
+using byte_view = std::span<const std::byte>;
 
 class								fatx_context;	// context that contains pointers on used instances of following classes
 class								frontend;		// arguments management & options values

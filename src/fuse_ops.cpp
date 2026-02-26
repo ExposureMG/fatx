@@ -94,14 +94,14 @@ int											fatx_readdir	(const char *path, void* buf, fuse_fill_dir_t ff, off
 	if((res = fatx_getattr(f->parent->path().data(), &st, fi)) != 0)
 		return res;
 	ff(buf, "..", &st, 0, FUSE_FILL_DIR_PLUS);
-	for(entry& i: f->childs) {
-		if(i.status == entry::valid || (fatx_context::get()->mmi.recover && i.status == entry::delwdata)) {
-			if((res = fatx_getattr(i.path().data(), &st, fi)) != 0)
+	for(const ptr_entry& i: f->childs) {
+		if(i->status == entry::valid || (fatx_context::get()->mmi.recover && i->status == entry::delwdata)) {
+			if((res = fatx_getattr(i->path().data(), &st, fi)) != 0)
 				return res;
-			if(ff(buf, i.name, &st, 0, FUSE_FILL_DIR_PLUS) != 0)
+			if(ff(buf, i->name, &st, 0, FUSE_FILL_DIR_PLUS) != 0)
 				return -EBADF;
 			#ifndef NDEBUG
-				dbglog(" {}", i.path());
+				dbglog(" {}", i->path());
 			#endif
 		}
 	}

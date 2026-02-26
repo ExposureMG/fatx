@@ -8,11 +8,11 @@
 class PartitionTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // No complex initialization needed for basic tests
+        // Pas d'initialisation complexe nécessaire pour ces tests de base
     }
 
     void TearDown() override {
-        // Cleanup if needed
+        // Nettoyage éventuel
     }
 };
 
@@ -47,7 +47,7 @@ TEST_F(PartitionTest, PartitionLabel_ReadLabel) {
     
     EXPECT_GT(size, 0);
     EXPECT_LE(size, 256);
-    // FATX labels start with 0xFE 0xFF
+    // Les labels FATX commencent par 0xFE 0xFF
     EXPECT_EQ(buf[0], 0xFE);
     EXPECT_EQ(buf[1], 0xFF);
 }
@@ -63,7 +63,7 @@ TEST_F(PartitionTest, PartitionLabel_SetAndRead) {
     
     // Vérifier que le label a été défini
     if (!part.par_label.empty()) {
-        // Label was successfully parsed
+        // Le label a bien été interprété
         EXPECT_GT(part.par_label.length(), 0);
     }
 }
@@ -104,7 +104,7 @@ TEST_F(PartitionTest, PartitionSize) {
 TEST_F(PartitionTest, PartitionClusterSize) {
     partition part;
     
-    // Typical cluster size
+    // Taille de cluster typique
     part.clus_size = 4096;
     EXPECT_EQ(part.clus_size, 4096);
 }
@@ -136,13 +136,13 @@ TEST_F(PartitionTest, PartitionChainSize_PowerOfTwo) {
     partition part;
     
     part.chain_size = 128;
-    // Verify it's a reasonable power of 2
+    // Vérifier qu'il s'agit bien d'une puissance de 2
     EXPECT_TRUE((part.chain_size & (part.chain_size - 1)) == 0);
 }
 
 TEST_F(PartitionTest, PartitionBiosectCreation) {
-    // Test the internal bootsect structure indirectly 
-    // We can't access private class but can test partition's write method results
+    // Tester indirectement la structure bootsect interne
+    // On ne peut pas accéder aux classes privées, mais on peut valider le comportement exposé
     partition part;
     
     part.par_id = 0x58544146; // "XTAF"
@@ -152,14 +152,14 @@ TEST_F(PartitionTest, PartitionBiosectCreation) {
 TEST_F(PartitionTest, PartitionLabelMultipleWrites) {
     partition part;
     
-    // Write label multiple times
+    // Écrire le label plusieurs fois
     unsigned char buf1[256] = {0};
     size_t size1 = part.label(buf1);
     
     unsigned char buf2[256] = {0};
     size_t size2 = part.label(buf2);
     
-    // Both reads should succeed
+    // Les deux lectures doivent réussir
     EXPECT_GT(size1, 0);
     EXPECT_GT(size2, 0);
 }
@@ -167,12 +167,12 @@ TEST_F(PartitionTest, PartitionLabelMultipleWrites) {
 TEST_F(PartitionTest, PartitionClockProperties) {
     partition part;
     
-    // Check that clus_pow is set (log2 of cluster size)
+    // Vérifier que clus_pow est bien défini (log2 de la taille de cluster)
     part.clus_pow = 12; // log2(4096)
     EXPECT_EQ(part.clus_pow, 12);
 }
 
-// Additional tests for better coverage
+// Tests additionnels pour améliorer la couverture
 TEST_F(PartitionTest, PartitionMultipleCreations) {
     partition part1;
     partition part2;
@@ -252,14 +252,14 @@ TEST_F(PartitionTest, PartitionLabel_EmptyBuffer) {
     unsigned char buf[256] = {0};
     size_t size = part.label(buf);
     
-    // Should still return valid data
+    // Doit tout de même retourner des données valides
     EXPECT_GT(size, 0);
 }
 
-// Advanced tests for better partition coverage
+// Tests avancés pour améliorer la couverture de partition
 TEST_F(PartitionTest, PartitionWrite_BasicOperation) {
-    // Note: write() requires a full context with device
-    // This test ensures the method is callable
+    // Note: partition::write() nécessite un contexte complet avec device
+    // Ce test vérifie simplement que la méthode est appelable
     partition part;
     part.par_id = 0x58544146;
     part.par_start = 0x1000;
@@ -684,7 +684,7 @@ TEST_F(PartitionSetupTest, Setup_BadRootCluster_Fuse) {
     EXPECT_EQ(ctx->par.root_clus, 1u);
 }
 
-// Mauvais root cluster avec prog=fsck, force_y → couvre la branche fsck + write()
+// Mauvais root cluster avec prog=fsck, force_y → couvre la branche fsck + correction via partition::write()
 TEST_F(PartitionSetupTest, Setup_BadRootCluster_Fsck_Fix) {
     char tmpl[] = "/tmp/fatx_bad2_XXXXXX";
     int fd = mkstemp(tmpl);
@@ -709,7 +709,7 @@ TEST_F(PartitionSetupTest, Setup_BadRootCluster_Fsck_Fix) {
     ofs.close();
     setup_context(test_file, frontend::fsck);
     ctx->mmi.force_y = true;  // répondre "yes" à "Correct it?"
-    // prog=fsck: bad root → demande correction → force_y → write() → 0
+    // prog=fsck: bad root → demande correction → force_y → partition::write() → 0
     EXPECT_EQ(ctx->par.setup(), 0);
     EXPECT_EQ(ctx->par.root_clus, 1u);
 }
@@ -780,7 +780,7 @@ TEST_F(PartitionSetupTest, Setup_KitTable_Mkfs_NoCrop) {
     ctx->mmi.table = "kit";
     ctx->mmi.partition = "x2";
     // table=="kit" + prog=mkfs → dh.id!=0x00020000 → dh=devheader(ts)
-    // p2_start*512 >> taille fichier → read() renvoie zéro → find() != 0 → found=false
+    // p2_start*512 >> taille fichier → read_bytes() renvoie des zéros → has_fsid() échoue → found=false
     // mkfs + found=false → calcule partition par défaut sans erreur
     int res = ctx->par.setup();
     // Attendu : 0 (mkfs tolère l'absence de FATX)
@@ -802,7 +802,7 @@ TEST_F(PartitionSetupTest, Setup_KitTable_Fsck_NoPartition) {
     EXPECT_TRUE(true);  // le chemin kit a bien été parcouru
 }
 
-// table="kit" + write() → doit écrire l'en-tête kit à l'offset 0
+// table="kit" + partition::write() → doit écrire l'en-tête kit à l'offset 0
 // Couvre partition.cpp L238-242 (branche write table=="kit")
 TEST_F(PartitionSetupTest, Write_KitTable) {
     test_file = make_fatx_file(0x400000);
@@ -810,7 +810,7 @@ TEST_F(PartitionSetupTest, Write_KitTable) {
     ctx->mmi.table = "kit";
     ASSERT_EQ(ctx->par.setup(), 0);
     ctx->mmi.table = "kit";  // remet "kit" après setup()
-    // write() avec table=="kit" → devheader(dev.size()).write(buf) + dev.write(0, buf)
+    // partition::write() avec table=="kit" → devheader(dev.size()).write(buf) + dev.write_bytes(0, ...)
     int res = ctx->par.write();
     (void)res;  // peut échouer selon la taille du fichier, on couvre juste le chemin
     EXPECT_TRUE(true);

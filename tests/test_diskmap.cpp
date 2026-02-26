@@ -6,6 +6,10 @@
 #include <filesystem>
 #include "context.hpp"
 
+using dskmap_base_t = dskmap;
+using dskmap_concrete = fatmap;
+#define dskmap dskmap_concrete
+
 // Tests pour dskmap avec contexte
 class DiskMapContextTest : public ::testing::Test {
 protected:
@@ -16,9 +20,6 @@ protected:
     void setup_fat_entry(clusptr i, clusptr v) {
         streamptr p = clsarithm::cls2fat(i);
         std::string buf;
-        // In this codebase, bigend is actually BIG ENDIAN (pos(i) = bytes-1-i)
-        // and bigend is actually LITTLE ENDIAN (pos(i) = i).
-        // Since FATX is BIG ENDIAN, we use bigend to write values.
         if (ctx->par.chain_size == 2) {
             uint16_t val = static_cast<uint16_t>(v);
             buf = byte_order<2>::bigend(val);
@@ -26,7 +27,10 @@ protected:
             uint32_t val = static_cast<uint32_t>(v);
             buf = byte_order<4>::bigend(val);
         }
-        void(ctx->dev.write(p, buf));
+		byte_buffer bytes(buf.size(), std::byte{0});
+		for(size_t idx = 0; idx < buf.size(); idx++)
+			bytes[idx] = static_cast<std::byte>(static_cast<unsigned char>(buf[idx]));
+        void(ctx->dev.write_bytes(p, byte_view(bytes.data(), bytes.size())));
     }
 
     void SetUp() override {
@@ -215,9 +219,12 @@ TEST_F(DiskMapContextTest, Dskmap_RealReadOutOfBounds) {
     std::string buf(2, '\0');
     buf[0] = static_cast<char>(bad_val & 0xFF);
     buf[1] = static_cast<char>((bad_val >> 8) & 0xFF);
+    byte_buffer bytes(buf.size(), std::byte{0});
+    for(size_t idx = 0; idx < buf.size(); idx++)
+        bytes[idx] = static_cast<std::byte>(static_cast<unsigned char>(buf[idx]));
     
     // Cluster 10
-    void(ctx->dev.write(clsarithm::cls2fat(10), buf));
+    void(ctx->dev.write_bytes(clsarithm::cls2fat(10), byte_view(bytes.data(), bytes.size())));
     
     // Read cluster 10 - should detect out of bounds
     // Since we are in fsck mode with force_a, it might try to fix it if it calls getanswer
@@ -403,7 +410,7 @@ TEST_F(DiskMapContextTest, MemMap_FatCheck_Pending) {
     mm.fatcheck();
     
     // Should be fixed in dskmap (real disk)
-    EXPECT_EQ(mm.dskmap::read(200), 201);
+    EXPECT_EQ(mm.dskmap_base_t::read(200), 201);
 }
 
 TEST_F(DiskMapContextTest, Dskmap_SpecialValues) {
@@ -607,7 +614,7 @@ TEST_F(DiskMapContextTest, MemMap_FatCheck_Fsck_No) {
     mm.fatcheck();
     // Should still be modified in memmap but NOT in dskmap
     EXPECT_EQ(mm.read(10), 11);
-    EXPECT_EQ(mm.dskmap::read(10), FLK);
+    EXPECT_EQ(mm.dskmap_base_t::read(10), FLK);
 }
 
 TEST_F(DiskMapContextTest, Dskmap_ForFat) {

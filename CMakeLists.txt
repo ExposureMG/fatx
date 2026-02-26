@@ -20,6 +20,7 @@ endif()
 option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
 
 option(SANITIZE "Enable sanitizers" OFF)
+set(FATX_DBGCR 48 CACHE STRING "Bytes per debug line for DBGCR (Debug builds)")
 
 include(CTest)
 
@@ -131,6 +132,10 @@ add_compile_options($<$<CONFIG:Debug>:$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Werror>>
 # de Boost.Bimap/multi_index dans les headers STL — supprimé en Release uniquement
 add_compile_options($<$<CONFIG:Release>:-Wno-null-dereference>)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  if(NOT FATX_DBGCR MATCHES "^[0-9]+$")
+    message(FATAL_ERROR "FATX_DBGCR must be a positive integer")
+  endif()
+
   if(ENABLE_COVERAGE)
     message(STATUS "Enabling code coverage")
     add_compile_options(--coverage)
@@ -150,7 +155,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     # -DDBG_CACHDMP
     # -DDBG_AREAS
     # -DDBG_GUESS
-    -DDBGCR=32
+    -DDBGCR=${FATX_DBGCR}
     -DDBGLIMIT=256
     # -DDBG_FAT
     # -DDBG_GAPS
@@ -158,68 +163,42 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     # -DNO_LOCK
     # -DNO_CACHE
   )
-  # Flags de couverture toujours actifs en Debug (génération .gcno/.gcda)
-  add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-fprofile-arcs>)
-  add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-ftest-coverage>)
-  add_link_options($<$<CXX_COMPILER_ID:GNU,Clang>:--coverage>)
+  set(FATX_SANITIZE_FLAGS
+    -fsanitize=address
+    -fsanitize=pointer-compare
+    -fsanitize=pointer-subtract
+    -fsanitize=leak
+    -fsanitize=undefined
+    -fsanitize=shift
+    -fsanitize=shift-exponent
+    -fsanitize=shift-base
+    -fsanitize=integer-divide-by-zero
+    -fsanitize=unreachable
+    -fsanitize=vla-bound
+    -fsanitize=null
+    -fsanitize=return
+    -fsanitize=signed-integer-overflow
+    -fsanitize=bounds
+    -fsanitize=alignment
+    -fsanitize=object-size
+    -fsanitize=float-divide-by-zero
+    -fsanitize=float-cast-overflow
+    -fsanitize=nonnull-attribute
+    -fsanitize=returns-nonnull-attribute
+    -fsanitize=bool
+    -fsanitize=enum
+    -fsanitize=vptr
+    -fsanitize=pointer-overflow
+  )
+
   if(SANITIZE)
     add_compile_options(
-      -fsanitize=address
-      -fsanitize=pointer-compare
-      -fsanitize=pointer-subtract
-      -fsanitize=leak
-      -fsanitize=undefined
-      -fsanitize=shift
-      -fsanitize=shift-exponent
-      -fsanitize=shift-base
-      -fsanitize=integer-divide-by-zero
-      -fsanitize=unreachable
-      -fsanitize=vla-bound
-      -fsanitize=null
-      -fsanitize=return
-      -fsanitize=signed-integer-overflow
-      -fsanitize=bounds
-      # -fsanitize=bounds-strict
-      -fsanitize=alignment
-      -fsanitize=object-size
-      -fsanitize=float-divide-by-zero
-      -fsanitize=float-cast-overflow
-      -fsanitize=nonnull-attribute
-      -fsanitize=returns-nonnull-attribute
-      -fsanitize=bool
-      -fsanitize=enum
-      -fsanitize=vptr
-      -fsanitize=pointer-overflow
+      ${FATX_SANITIZE_FLAGS}
       --param=max-gcse-memory=256000
       --param=max-vartrack-size=100000000
     )
     add_link_options(
-      -fsanitize=address
-      -fsanitize=pointer-compare
-      -fsanitize=pointer-subtract
-      -fsanitize=leak
-      -fsanitize=undefined
-      -fsanitize=shift
-      -fsanitize=shift-exponent
-      -fsanitize=shift-base
-      -fsanitize=integer-divide-by-zero
-      -fsanitize=unreachable
-      -fsanitize=vla-bound
-      -fsanitize=null
-      -fsanitize=return
-      -fsanitize=signed-integer-overflow
-      -fsanitize=bounds
-      -fsanitize=bounds-strict
-      -fsanitize=alignment
-      -fsanitize=object-size
-      -fsanitize=float-divide-by-zero
-      -fsanitize=float-cast-overflow
-      -fsanitize=nonnull-attribute
-      -fsanitize=returns-nonnull-attribute
-      -fsanitize=bool
-      -fsanitize=enum
-      -fsanitize=vptr
-      -fsanitize=pointer-overflow
+      ${FATX_SANITIZE_FLAGS}
     )
 endif()
 endif()
@@ -412,11 +391,12 @@ foreach(i RANGE 0 ${nb})
     set_tests_properties(
       ${test_name}
       PROPERTIES
+        TIMEOUT 180
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0:halt_on_error=1;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1"
     )
   else()
-    set_tests_properties(${test_name} PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+    set_tests_properties(${test_name} PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR} TIMEOUT 180)
   endif()
 endforeach(i)
 

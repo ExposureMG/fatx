@@ -12,7 +12,8 @@ export PYTHONPYCACHEPREFIX="$BUILD_DIR/.pycache"
 ensure_build_prereqs() {
     local build_type=$1
     local build_tests=$2
-    local sanitize=$3
+    local sanitize=${3:-OFF}
+    local enable_coverage=${4:-OFF}
 
     local cache_file="$BUILD_DIR/CMakeCache.txt"
     local tests_bin="$BUILD_DIR/fatx_tests"
@@ -23,6 +24,7 @@ ensure_build_prereqs() {
         grep -Eq "^BUILD_TESTS:.*=${build_tests}$" "$cache_file" || need_rebuild=1
         grep -Eq '^CMAKE_EXPORT_COMPILE_COMMANDS:.*=ON$' "$cache_file" || need_rebuild=1
         grep -Eq "^SANITIZE:.*=${sanitize}$" "$cache_file" || need_rebuild=1
+        grep -Eq "^ENABLE_COVERAGE:.*=${enable_coverage}$" "$cache_file" || need_rebuild=1
         [[ -f "$BUILD_DIR/compile_commands.json" ]] || need_rebuild=1
     else
         need_rebuild=1
@@ -35,7 +37,7 @@ ensure_build_prereqs() {
     fi
 
     if [[ $need_rebuild -eq 0 ]]; then
-        echo "[i] Reuse existing build in $BUILD_DIR (${build_type}, BUILD_TESTS=${build_tests}, SANITIZE=${sanitize})"
+        echo "[i] Reuse existing build in $BUILD_DIR (${build_type}, BUILD_TESTS=${build_tests}, SANITIZE=${sanitize}, ENABLE_COVERAGE=${enable_coverage})"
         return
     fi
 
@@ -43,11 +45,12 @@ ensure_build_prereqs() {
     rm -rf "$BUILD_DIR"
     mkdir -p "$BUILD_DIR"
     printf " ✓\n"
-    echo "[i] Configuration CMake (${build_type}, BUILD_TESTS=${build_tests}, SANITIZE=${sanitize})..."
+    echo "[i] Configuration CMake (${build_type}, BUILD_TESTS=${build_tests}, SANITIZE=${sanitize}, ENABLE_COVERAGE=${enable_coverage})..."
     cmake -B "$BUILD_DIR" -S "$ROOT_DIR" \
         -DCMAKE_BUILD_TYPE="$build_type" \
         -DBUILD_TESTS="$build_tests" \
         -DSANITIZE="$sanitize" \
+        -DENABLE_COVERAGE="$enable_coverage" \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON > /dev/null 2>&1
     echo "[i] Compilation..."
     cmake --build "$BUILD_DIR" -j"$(nproc)"
@@ -93,7 +96,7 @@ phase_1() {
     echo "║ [Phase 1/7] Build Release (binary, docs, install)  ║"
     echo "╚════════════════════════════════════════════════════╝"
     echo ""
-    ensure_build_prereqs Release OFF OFF
+    ensure_build_prereqs Release OFF
 
     echo "[1.1/3] Documentation (Doxygen)..."
     cmake --build "$BUILD_DIR" -j"$(nproc)" --target doxygen > /dev/null 2>&1
@@ -111,7 +114,7 @@ phase_2() {
     echo "║ [Phase 2/7] Tests Release                          ║"
     echo "╚════════════════════════════════════════════════════╝"
     echo ""
-    ensure_build_prereqs Release ON OFF
+    ensure_build_prereqs Release ON
 
     echo "[2.1/1] Exécution des tests (GoogleTest + scripts bash en parallèle)..."
     (
@@ -121,7 +124,7 @@ phase_2() {
         ctest --output-on-failure -j"$(nproc)" &
         CTEST_PID=$!
         wait $GTEST_PID $CTEST_PID
-    ) || true
+    )
 }
 
 phase_3() {
@@ -130,7 +133,7 @@ phase_3() {
     echo "║ [Phase 3/7] Tests Debug (coverage + dead code)     ║"
     echo "╚════════════════════════════════════════════════════╝"
     echo ""
-    ensure_build_prereqs Debug ON OFF
+    ensure_build_prereqs Debug ON OFF ON
 
     echo "[3.1/2] Analyse de couverture..."
     cmake --build "$BUILD_DIR" --target coverage -- -j"$(nproc)"
@@ -158,7 +161,7 @@ phase_5() {
     echo ""
 
     require_valgrind "memcheck" || return
-    ensure_build_prereqs Debug ON OFF
+    ensure_build_prereqs Debug ON
 
     echo "[5.1/1] Analyse mémoire (memcheck)..."
     local memcheck_rc=0
@@ -181,7 +184,7 @@ phase_6() {
     echo ""
 
     require_valgrind "helgrind" || return
-    ensure_build_prereqs Debug ON OFF
+    ensure_build_prereqs Debug ON
 
     echo "[6.1/1] Analyse concurrence (helgrind)..."
     local helgrind_rc=0
@@ -204,7 +207,7 @@ phase_7() {
     echo ""
 
     require_valgrind "drd" || return
-    ensure_build_prereqs Debug ON OFF
+    ensure_build_prereqs Debug ON
 
     echo "[7.1/1] Analyse concurrence (drd)..."
     local drd_rc=0

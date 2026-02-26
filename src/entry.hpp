@@ -18,8 +18,8 @@
  */
 
 #include <string>
+#include <vector>
 #include <sys/stat.h>
-#include <boost/ptr_container/ptr_vector.hpp>
 
 #include "types.hpp"
 #include "utils.hpp"
@@ -204,7 +204,7 @@ class								attrib {
         date							update;
         streamptr						loc;
         entry*							parent;
-        boost::ptr_vector<entry>		childs;
+        std::vector<ptr_entry>			childs;
         ptr_vareas						areas;
     public:
                                         entry();

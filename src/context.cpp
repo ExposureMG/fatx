@@ -45,7 +45,7 @@ int							fatx_context::	setup() {
 	if(mmi.prog == frontend::fsck || mmi.prog == frontend::unrm || (mmi.prog == frontend::fuse && mmi.recover))
 		fat = new memmap(par);
 	else
-		fat = new dskmap(par);
+		fat = new fatmap(par);
 	#if !defined NDEBUG && defined DBG_INIT
 		dbglog("::EOMAP");
 	#endif

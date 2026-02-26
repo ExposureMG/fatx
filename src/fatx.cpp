@@ -171,7 +171,11 @@ int main(int argc, char *argv[]) {
 			console::write(".");
 			fatx_context::get()->fat->erase();
 			console::write(".");
-			status = status || fatx_context::get()->dev.write(fatx_context::get()->par.root_start, std::string(fatx_context::get()->par.clus_size, '\0'));
+			byte_buffer zeros(static_cast<byte_buffer::size_type>(fatx_context::get()->par.clus_size), std::byte{0});
+			status = status || fatx_context::get()->dev.write_bytes(
+				fatx_context::get()->par.root_start,
+				byte_view(zeros.data(), zeros.size())
+			);
 			console::write(".");
 			if(!status) {
 				fatx_context::get()->root = new entry("", 0, true);

@@ -80,14 +80,26 @@ public:
     [[nodiscard]] int				resizefat(ptr_vareas, clusptr);
     std::string						printchain(clusptr);
     void							printgaps() const;
-    virtual void					change [[noreturn]] (clusptr, entry*, clusptr = FLK, status_t = marked);
-    virtual status_t				status [[noreturn]] (clusptr) const;
-    virtual entry*					getentry [[noreturn]] (clusptr) const;
-    virtual void					fatlost [[noreturn]] ();
-    virtual void					fatcheck [[noreturn]] ();
+    virtual void					change(clusptr, entry*, clusptr = FLK, status_t = marked) = 0;
+    [[nodiscard]] virtual status_t	status(clusptr) const = 0;
+    [[nodiscard]] virtual entry*	getentry(clusptr) const = 0;
+    virtual void					fatlost() = 0;
+    virtual void					fatcheck() = 0;
     #ifndef NDEBUG
-    virtual void					printfat [[noreturn]] ();
+    virtual void					printfat() = 0;
     #endif
+};
+class							    fatmap final : public dskmap {
+public:
+									fatmap(const partition&);
+	void							change(clusptr, entry*, clusptr = FLK, status_t = marked) override;
+    [[nodiscard]] [[gnu::const]] status_t	status(clusptr) const override;
+    [[nodiscard]] [[gnu::const]] entry*		getentry(clusptr) const override;
+	void							fatlost() override;
+	void							fatcheck() override;
+	#ifndef NDEBUG
+	void							printfat() override;
+	#endif
 };
 class								memmap final : public dskmap {
 private:

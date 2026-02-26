@@ -20,6 +20,18 @@
 
 #include <bitset>
 
+namespace {
+
+[[nodiscard]] bool has_fsid(const byte_buffer& block) {
+	return block.size() >= 4 &&
+		block[0] == static_cast<std::byte>(fsid[0]) &&
+		block[1] == static_cast<std::byte>(fsid[1]) &&
+		block[2] == static_cast<std::byte>(fsid[2]) &&
+		block[3] == static_cast<std::byte>(fsid[3]);
+}
+
+}
+
 // Implémentation des méthodes de la classe partition
 
 							partition::		partition() :
@@ -76,7 +88,7 @@ int							partition::		setup() {
 			continue;
 		cap.emplace(i.first, std::set<std::string>{});
 		for(const auto &j: i.second) {
-			if(fatx_context::get()->dev.read(j.second.first).find(fsid, 0) == 0) {
+			if(has_fsid(fatx_context::get()->dev.read_bytes(j.second.first))) {
 				cap[i.first].insert(j.first);
 				if(fatx_context::get()->mmi.verbose)
 					console::write("Found FATX filesystem in {} partition in {} table.\n",
@@ -98,13 +110,13 @@ int							partition::		setup() {
 	#endif
 	if(
 		fatx_context::get()->mmi.offset != 0 &&
-		(fatx_context::get()->mmi.prog == frontend::mkfs || fatx_context::get()->dev.read(fatx_context::get()->mmi.offset).find(fsid, 0) == 0)
+		(fatx_context::get()->mmi.prog == frontend::mkfs || has_fsid(fatx_context::get()->dev.read_bytes(fatx_context::get()->mmi.offset)))
 	) {
 		par_start = fatx_context::get()->mmi.offset;
 		par_size = ts - par_start;
-		if(fatx_context::get()->mmi.verbose && fatx_context::get()->dev.read(fatx_context::get()->mmi.offset).find(fsid, 0) == 0)
+		if(fatx_context::get()->mmi.verbose && has_fsid(fatx_context::get()->dev.read_bytes(fatx_context::get()->mmi.offset)))
 			console::write("Found FATX partition at 0x{:016X}.\n", par_start);
-		found = fatx_context::get()->dev.read(fatx_context::get()->mmi.offset).find(fsid, 0) == 0;
+		found = has_fsid(fatx_context::get()->dev.read_bytes(fatx_context::get()->mmi.offset));
 	}
 	else if(
 		cap.find(fatx_context::get()->mmi.table) != cap.end() && (
@@ -117,10 +129,11 @@ int							partition::		setup() {
 		found = cap[fatx_context::get()->mmi.table].find(fatx_context::get()->mmi.partition) != cap[fatx_context::get()->mmi.table].end();
 	}
 	else if(fatx_context::get()->mmi.table == "kit") {
-		devheader dh(fatx_context::get()->dev.read(0).data());
+		byte_buffer header = fatx_context::get()->dev.read_bytes(0);
+		devheader dh(reinterpret_cast<const char*>(header.data()));
 		if(dh.id != 0x00020000 && fatx_context::get()->mmi.prog == frontend::mkfs)
 			dh = devheader(ts);
-		if(fatx_context::get()->dev.read(dh.p2_start * blksize).find(fsid, 0) == 0) {
+		if(has_fsid(fatx_context::get()->dev.read_bytes(dh.p2_start * blksize))) {
 			if(fatx_context::get()->mmi.verbose)
 				console::write("Found FATX filesystem in {} partition in {} table.\n",
 					names["x2"],
@@ -132,7 +145,7 @@ int							partition::		setup() {
 				found = true;
 			}
 		}
-		if(fatx_context::get()->dev.read(dh.p1_start * blksize).find(fsid, 0) == 0) {
+		if(has_fsid(fatx_context::get()->dev.read_bytes(dh.p1_start * blksize))) {
 			if(fatx_context::get()->mmi.verbose)
 				console::write("Found FATX filesystem in {} partition in {} table.\n",
 					names["xdv"],
@@ -166,7 +179,8 @@ int							partition::		setup() {
 	if(found) {
 		if(fatx_context::get()->mmi.verbose)
 			console::write("Using {} partition in {} table.\n", names[fatx_context::get()->mmi.partition], names[fatx_context::get()->mmi.table]);
-		bootsect	bs(fatx_context::get()->dev.read(par_start).data());
+		byte_buffer boot = fatx_context::get()->dev.read_bytes(par_start);
+		bootsect	bs(reinterpret_cast<const char*>(boot.data()));
 		par_id		= bs.id;
 		root_clus	= bs.root;
 		clus_size	= static_cast<uint32_t>(blksize * (fatx_context::get()->mmi.clus_size ? fatx_context::get()->mmi.clus_size : (bs.spc == 0 || bs.spc > 0xFFFF) ? 1 : bs.spc));
@@ -235,14 +249,14 @@ int							partition::		setup() {
 int							partition::		write() {
 	if(fatx_context::get()->mmi.table == "kit") {
 		int res;
-		std::string buf(blksize, '\0');
-		devheader(fatx_context::get()->dev.size()).write(&buf[0]);
-		if((res = fatx_context::get()->dev.write(0, buf)))
+		byte_buffer buf(blksize, std::byte{0});
+		devheader(fatx_context::get()->dev.size()).write(reinterpret_cast<char*>(buf.data()));
+		if((res = fatx_context::get()->dev.write_bytes(0, byte_view(buf.data(), buf.size()))))
 			return res;
 	}
-	std::string buf(blksize, '\0');
-	bootsect(par_id, static_cast<uint32_t>(clus_size / blksize), static_cast<uint32_t>(root_clus)).write(&buf[0]);
-	return fatx_context::get()->dev.write(par_start, buf);
+	byte_buffer buf(blksize, std::byte{0});
+	bootsect(par_id, static_cast<uint32_t>(clus_size / blksize), static_cast<uint32_t>(root_clus)).write(reinterpret_cast<char*>(buf.data()));
+	return fatx_context::get()->dev.write_bytes(par_start, byte_view(buf.data(), buf.size()));
 }
 size_t						partition::		label(unsigned char buf[slab]) const {
 	size_t res = 2;
