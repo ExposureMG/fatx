@@ -21,7 +21,6 @@
 #include <bitset>
 
 namespace {
-
 [[nodiscard]] bool has_fsid(const byte_buffer& block) {
 	return block.size() >= 4 &&
 		block[0] == static_cast<std::byte>(fsid[0]) &&
@@ -29,7 +28,6 @@ namespace {
 		block[2] == static_cast<std::byte>(fsid[2]) &&
 		block[3] == static_cast<std::byte>(fsid[3]);
 }
-
 }
 
 // Implémentation des méthodes de la classe partition
@@ -39,7 +37,6 @@ namespace {
 	clus_num(0),			clus_fat(0),			chain_size(0),			chain_pow(0),			fat_start(0),			fat_size(0),
 	root_start(0),			root_clus(0) {
 }
-
 int							partition::		setup() {
 	uint64_t ts = fatx_context::get()->dev.size();
 	bool found = false;

@@ -23,21 +23,18 @@
 #include <boost/tokenizer.hpp>
 
 namespace {
-
 [[nodiscard]] std::string bytes_to_raw(const byte_buffer& bytes) {
 	std::string raw(bytes.size(), '\0');
 	for(size_t idx = 0; idx < bytes.size(); idx++)
 		raw[idx] = static_cast<char>(bytes[idx]);
 	return raw;
 }
-
 [[nodiscard]] byte_buffer raw_to_bytes(const std::string& raw) {
 	byte_buffer bytes(raw.size(), std::byte{0});
 	for(size_t idx = 0; idx < raw.size(); idx++)
 		bytes[idx] = static_cast<std::byte>(static_cast<unsigned char>(raw[idx]));
 	return bytes;
 }
-
 }
 
 // Implémentation des méthodes de la classe entry
