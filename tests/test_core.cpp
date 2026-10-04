@@ -646,3 +646,161 @@ TEST(Fixes, BracesInNames) {
 	v.reset();
 	expect_clean(dev);
 }
+
+// --- in-place replacement -------------------------------------------------------
+
+namespace {
+struct snapshot {
+	uint64_t entry_offset = 0;
+	uint32_t first_cluster = 0;
+	std::vector<uint32_t> chain;
+	std::string name;
+	std::time_t created = 0;
+};
+snapshot snap(fatx::volume &v, const std::string &path) {
+	snapshot s;
+	fatx::entry_info i;
+	EXPECT_EQ(v.lookup(path, i), 0);
+	s.entry_offset = i.entry_offset;
+	s.first_cluster = i.first_cluster;
+	s.name = i.name;
+	s.created = i.created;
+	EXPECT_EQ(v.clusters(path, s.chain), 0);
+	return s;
+}
+// replace() then write the new contents, as an application does in its finish()
+int replace_with(fatx::volume &v, const std::string &path, const std::vector<std::byte> &data) {
+	if(int r = v.replace(path, data.size()))
+		return r;
+	return data.empty() ? 0 : v.write(path, 0, data);
+}
+}
+
+TEST(Replace, KeepsTheEntryAndItsClusters) {
+	auto dev = formatted(16 << 20);
+	auto v = open_rw(dev);
+	const uint32_t cs = v->info().cluster_size;
+	// three files, the middle one fragmented so its chain is not one run
+	ASSERT_EQ(v->mkdir("/dir"), 0);
+	ASSERT_EQ(v->create("/dir/a", cs), 0);
+	ASSERT_EQ(v->create("/dir/target", 0), 0);
+	ASSERT_EQ(v->write("/dir/target", 0, random_bytes(cs, 1)), 0);
+	ASSERT_EQ(v->create("/dir/b", cs), 0);
+	ASSERT_EQ(v->write("/dir/target", cs, random_bytes(2 * cs + 100, 2)), 0);	// grows elsewhere
+	ASSERT_EQ(v->create("/dir/c", 10), 0);
+	const auto before = snap(*v, "/dir/target");
+	ASSERT_EQ(before.chain.size(), 4u);
+	EXPECT_NE(before.chain[1], before.chain[0] + 1);	// fragmented
+	uint64_t room = 0;
+	ASSERT_EQ(v->replace_capacity("/dir/target", &room), 0);
+	EXPECT_EQ(room, 4u * cs);
+
+	// same size: everything stays, new contents
+	const auto same = random_bytes(3 * cs + 100, 3);
+	ASSERT_EQ(replace_with(*v, "/dir/target", same), 0);
+	auto after = snap(*v, "/dir/target");
+	EXPECT_EQ(after.entry_offset, before.entry_offset);
+	EXPECT_EQ(after.chain, before.chain);
+	EXPECT_EQ(after.created, before.created);
+	EXPECT_EQ(read_all(*v, "/dir/target"), same);
+
+	// bigger but within the last cluster: still in place
+	const auto fuller = random_bytes(4 * cs, 4);
+	ASSERT_EQ(replace_with(*v, "/dir/target", fuller), 0);
+	after = snap(*v, "/dir/target");
+	EXPECT_EQ(after.entry_offset, before.entry_offset);
+	EXPECT_EQ(after.chain, before.chain);
+	EXPECT_EQ(read_all(*v, "/dir/target"), fuller);
+
+	// too big: refused, nothing on the device changed
+	const auto image = dev->data();
+	EXPECT_EQ(v->replace("/dir/target", 4u * cs + 1), EFBIG);
+	EXPECT_EQ(dev->data(), image);
+
+	// smaller: the start of the chain stays, only the tail is freed
+	const uint64_t free_before = v->info().free_clusters;
+	const auto small = random_bytes(cs + 1, 5);
+	ASSERT_EQ(replace_with(*v, "/dir/target", small), 0);
+	after = snap(*v, "/dir/target");
+	EXPECT_EQ(after.entry_offset, before.entry_offset);
+	EXPECT_EQ(after.chain, std::vector<uint32_t>(before.chain.begin(), before.chain.begin() + 2));
+	EXPECT_EQ(v->info().free_clusters, free_before + 2);
+	EXPECT_EQ(read_all(*v, "/dir/target"), small);
+	v.reset();
+	expect_clean(dev);
+
+	// and after reopening
+	v = open_rw(dev);
+	after = snap(*v, "/dir/target");
+	EXPECT_EQ(after.entry_offset, before.entry_offset);
+	EXPECT_EQ(after.first_cluster, before.first_cluster);
+	EXPECT_EQ(read_all(*v, "/dir/target"), small);
+	std::vector<fatx::entry_info> list;
+	ASSERT_EQ(v->list("/dir", list), 0);
+	ASSERT_EQ(list.size(), 4u);
+	EXPECT_EQ(list[1].name, "target");	// same index in the directory
+}
+
+TEST(Replace, EmptyFilesAndErrors) {
+	auto dev = formatted(16 << 20);
+	auto v = open_rw(dev);
+	const uint32_t cs = v->info().cluster_size;
+	ASSERT_EQ(v->create("/empty", 0), 0);
+	uint64_t room = 1;
+	ASSERT_EQ(v->replace_capacity("/empty", &room), 0);
+	EXPECT_EQ(room, 0u);
+	EXPECT_EQ(v->replace("/empty", 1), EFBIG);	// an empty file has no cluster
+	EXPECT_EQ(v->replace("/empty", 0), 0);
+	// emptying a file frees all its clusters but keeps the entry
+	ASSERT_EQ(v->create("/f", 2 * cs), 0);
+	const auto before = snap(*v, "/f");
+	const uint64_t free_before = v->info().free_clusters;
+	ASSERT_EQ(v->replace("/f", 0), 0);
+	const auto after = snap(*v, "/f");
+	EXPECT_EQ(after.entry_offset, before.entry_offset);
+	EXPECT_TRUE(after.chain.empty());
+	EXPECT_EQ(v->info().free_clusters, free_before + 2);
+	EXPECT_EQ(v->replace("/missing", 0), ENOENT);
+	ASSERT_EQ(v->mkdir("/d"), 0);
+	EXPECT_EQ(v->replace("/d", 0), EISDIR);
+	EXPECT_EQ(v->replace("/name.txt", 0), EPERM);
+	v.reset();
+	expect_clean(dev);
+	auto ro = fatx::volume::open(dev, {}, false, {}, nullptr);
+	ASSERT_NE(ro, nullptr);
+	EXPECT_EQ(ro->replace("/f", 0), EROFS);
+}
+
+TEST(Replace, DamagedImages) {
+	auto pristine = formatted(4 << 20);
+	{
+		auto v = open_rw(pristine);
+		ASSERT_EQ(v->mkdir("/d"), 0);
+		for(int i = 0; i < 6; i++) {
+			const auto data = random_bytes(static_cast<size_t>(i) * 3000 + 1, static_cast<unsigned>(i));
+			ASSERT_EQ(v->create("/d/f" + std::to_string(i), data.size()), 0);
+			ASSERT_EQ(v->write("/d/f" + std::to_string(i), 0, data), 0);
+		}
+	}
+	int err = 0;
+	const auto info = fatx::volume::open(pristine, {}, false, {}, &err)->info();
+	std::mt19937_64 gen(99);
+	for(int round = 0; round < 150; round++) {
+		auto dev = std::make_shared<fatx::memory_io>(0);
+		dev->data() = pristine->data();
+		for(int i = 0; i < 8; i++)
+			dev->data()[gen() % (info.data_offset + 6 * info.cluster_size)] = static_cast<std::byte>(gen() & 0xFF);
+		auto v = fatx::volume::open(dev, {}, true, {}, &err);
+		if(!v)
+			continue;
+		for(int i = 0; i < 6; i++) {
+			const std::string p = "/d/f" + std::to_string(i);
+			uint64_t room = 0;
+			std::vector<uint32_t> chain;
+			void(v->replace_capacity(p, &room));
+			void(v->clusters(p, chain));
+			const auto data = random_bytes(gen() % (std::min<uint64_t>(room, 65536) + 1), static_cast<unsigned>(round));
+			void(replace_with(*v, p, data));
+		}
+	}
+}

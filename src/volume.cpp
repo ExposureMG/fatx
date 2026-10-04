@@ -157,6 +157,7 @@ entry_info							to_info(const entry &e) {
 	i.label = e.flags.lab;
 	i.size = e.flags.dir ? 0 : e.size;
 	i.first_cluster = static_cast<uint32_t>(e.cluster);
+	i.entry_offset = e.loc;
 	i.created = e.creation();
 	i.accessed = e.access();
 	i.modified = e.update();
@@ -468,6 +469,59 @@ int									volume::		truncate(const std::string &path, uint64_t size) {
 		if(int res = load_areas(e))
 			return res;
 		return e->resize(size);
+	});
+}
+
+int									volume::		clusters(const std::string &path, std::vector<uint32_t> &out) {
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		out.clear();
+		entry *e = d->ctx->root->find(path.c_str());
+		if(e == nullptr)
+			return ENOENT;
+		if(e->cluster == FLK || e->cluster == EOC)
+			return 0;
+		for(const area &a: d->ctx->fat->getareas(e->cluster)) {
+			for(clusptr c = a.start; c <= a.stop; c++)
+				out.push_back(static_cast<uint32_t>(c));
+		}
+		return 0;
+	});
+}
+
+int									volume::		replace_capacity(const std::string &path, uint64_t *bytes) {
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		entry *e = d->ctx->root->find(path.c_str());
+		if(e == nullptr)
+			return ENOENT;
+		if(e->flags.dir)
+			return EISDIR;
+		if(bytes)
+			*bytes = clsarithm::siz2cls(e->size) * d->ctx->par.clus_size;
+		return 0;
+	});
+}
+
+int									volume::		replace(const std::string &path, uint64_t new_size) {
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		if(!d->writable)
+			return EROFS;
+		entry *e = d->ctx->root->find(path.c_str());
+		if(e == nullptr)
+			return ENOENT;
+		if(e->flags.dir)
+			return EISDIR;
+		if(e->flags.lab)
+			return EPERM;
+		if(clsarithm::siz2cls(new_size) > clsarithm::siz2cls(e->size))
+			return EFBIG;		// would need clusters the file does not have
+		if(new_size == e->size)
+			return 0;
+		if(int res = load_areas(e))
+			return res;
+		return e->resize(new_size);		// frees the tail clusters only
 	});
 }
 

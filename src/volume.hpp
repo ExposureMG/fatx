@@ -70,6 +70,7 @@ struct								entry_info {
 	bool							label = false;	// volume label file (name.txt)
 	uint64_t						size = 0;
 	uint32_t						first_cluster = 0;
+	uint64_t						entry_offset = 0;	// device offset of its 64-byte directory record (0: root)
 	std::time_t						created = 0;	// local time as stored, converted with mktime()
 	std::time_t						accessed = 0;
 	std::time_t						modified = 0;
@@ -133,6 +134,18 @@ public:
 	[[nodiscard]] int				write(const std::string &path, uint64_t offset, std::span<const std::byte> data);
 	// Changes the size of a file.
 	[[nodiscard]] int				truncate(const std::string &path, uint64_t size);
+	// The clusters of a file or directory in chain order (empty for an empty file).
+	[[nodiscard]] int				clusters(const std::string &path, std::vector<uint32_t> &out);
+	// In-place replacement. The room a replacement may have: the clusters the
+	// file has now, ceil(size / cluster size) clusters, in bytes.
+	[[nodiscard]] int				replace_capacity(const std::string &path, uint64_t *bytes);
+	// Starts an in-place replacement: the file keeps its directory record (same
+	// index in its directory), name, attributes and creation date, and its first
+	// clusters; then write() puts the new contents over them. new_size must fit
+	// replace_capacity() (EFBIG otherwise, nothing changed). A smaller file keeps
+	// the start of its chain and frees the clusters it no longer needs; an empty
+	// one frees them all (an empty FATX file has no cluster).
+	[[nodiscard]] int				replace(const std::string &path, uint64_t new_size);
 	[[nodiscard]] int				mkdir(const std::string &path);
 	// Renames or moves `from` to the full path `to`. With `replace`, an existing
 	// file at `to` is deleted first; otherwise EEXIST.
