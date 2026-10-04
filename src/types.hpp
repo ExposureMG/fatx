@@ -23,15 +23,6 @@
 #include <span>
 #include <vector>
 
-using streamptr                     = uint64_t;  		// pointers in device
-using clusptr                       = uint64_t;    		// cluster numbers
-using filesize                      = uint64_t;   		// file size
-using byte_buffer                   = std::vector<std::byte>;
-using byte_view                     = std::span<const std::byte>;
-using ptr_vareas                    = std::shared_ptr<vareas>;
-using ptr_buffer                    = std::unique_ptr<buffer>;
-using ptr_entry                     = std::unique_ptr<entry>;
-
 class								fatx_context;	// context that contains pointers on used instances of following classes
 class								frontend;		// arguments management & options values
 class								device;			// read/write to the device
@@ -41,3 +32,12 @@ class								memmap;			// memory file allocation table used to handle deleted en
 class								entry;			// file or directory entry
 class								vareas;			// vector of areas() in fat
 class								buffer;			// file buffer
+
+using streamptr                     = uint64_t;  		// pointers in device
+using clusptr                       = uint64_t;    		// cluster numbers
+using filesize                      = uint64_t;   		// file size
+using byte_buffer                   = std::vector<std::byte>;
+using byte_view                     = std::span<const std::byte>;
+using ptr_vareas                    = std::shared_ptr<vareas>;
+using ptr_buffer                    = std::unique_ptr<buffer>;
+using ptr_entry                     = std::unique_ptr<entry>;
