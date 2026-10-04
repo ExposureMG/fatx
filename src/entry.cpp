@@ -97,7 +97,7 @@ namespace {
 	parent(nullptr),
 	childs(),
 	areas() {
-	const std::string nchar = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&'()-.@[]^_`{}~ ";
+	const std::string nchar = name_chars;
 	status = (
 		// 0xFF or 0x00 on 2 firsts bytes = end of entries
 		(buf == nullptr || (buf[0] == EOD && buf[1] == EOD) || (buf[0] == 0 && buf[1] == 0)) ? end : (

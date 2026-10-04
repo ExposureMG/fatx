@@ -26,15 +26,34 @@
 #include <shared_mutex>
 #include <mutex>
 
-fatx_context*				fatx_context::	fatxc		= nullptr;
+std::atomic<fatx_context*>	fatx_context::	fatxc		= nullptr;
+thread_local fatx_context::local_t	fatx_context::	local;
 
-							fatx_context::	fatx_context(frontend& m): mmi(m), fat(nullptr), root(nullptr), ready(false) {
-	set(this);
+							fatx_context::scope::	scope(fatx_context* fc) : previous(local) {
+	local.active = true;
+	local.ctx = fc;
+}
+							fatx_context::scope::	~scope() {
+	local = previous;
+}
+							fatx_context::	fatx_context(frontend& m): mmi(m), fat(nullptr), root(nullptr), ready(false), inconsistent(false) {
+	if(local.active)
+		local.ctx = this;
+	else
+		set(this);
 }
 							fatx_context::	~fatx_context() {
 	ready = false;
-	destroy();
-	set(nullptr);
+	{
+		// the context being destroyed must be the current one while its
+		// entries are released
+		scope s(this);
+		destroy();
+	}
+	if(local.active && local.ctx == this)
+		local.ctx = nullptr;
+	fatx_context* self = this;
+	fatxc.compare_exchange_strong(self, nullptr, std::memory_order_relaxed);
 }
 int							fatx_context::	setup() {
 	int res = 0;
@@ -51,6 +70,7 @@ int							fatx_context::	setup() {
 	#endif
 	if(mmi.prog != frontend::mkfs) {
 		root = new entry();
+		inconsistent = ready;
 		if(mmi.prog == frontend::fuse && ready) {
 			console::write("Errors found, please run fsck.fatx to correct.\n", mmi.dialog);
 			return ECANCELED;

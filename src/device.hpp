@@ -23,6 +23,7 @@
 
 #include "types.hpp"
 #include "utils.hpp"
+#include "io.hpp"
 
 class								device {
 private:
@@ -45,6 +46,7 @@ private:
     mymutx							authd;
     chgfile							chgf;
     std::map<streamptr, std::fstream>	usbd;
+    std::shared_ptr<fatx::io_backend>	backend;	// frontend::backend, if any
 public:
                                     device();
                                     ~device();
@@ -53,6 +55,7 @@ public:
     bool							modified() const { return changes; }
     byte_buffer                     read_bytes(streamptr, size_t = blksize);
     [[nodiscard]] int               write_bytes(streamptr, byte_view);
+    [[nodiscard]] int               sync();
     static std::string				address(streamptr);
     void							devlog(bool, streamptr, const std::string&) const;
     std::string						print(streamptr, size_t = blksize, size_t = 32);

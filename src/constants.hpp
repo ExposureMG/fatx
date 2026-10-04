@@ -39,6 +39,7 @@ inline constexpr int				code_usage		= 1<<4;					// usage error code
 
 inline constexpr char const*		sepdir			= "/";		    		// using unix directories
 inline constexpr char const*		fsid			= "XTAF";		    	// filesystem id
+inline constexpr char const*		name_chars		= "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&'()-.@[]^_`{}~ ";	// characters allowed in entry names
 inline constexpr char const*		flab			= "name.txt";	    	// file used for label name
 inline constexpr char const*		def_landf		= "lost+found";	    	// default directory for lost & founds
 

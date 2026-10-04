@@ -89,3 +89,19 @@ filesystem in the current directory (from where the tool is called)
 "unrm.fatx -l /dev/sdb"
 The user will be prompted for each deleted file found to recover it
 or not.
+
+EMBEDDING (fatx_core):
+The filesystem code is also built as a static library, fatx_core, that needs
+only a C++20 compiler and the Boost headers (no FUSE, no
+Boost.Program_options). Add this directory with CMake add_subdirectory() and
+link fatx_core; FATX_BUILD_TOOLS (default: on when built on its own) builds the
+command-line tools, FATX_WITH_FUSE (default: on when FUSE3 is found) builds
+fusefatx. The API is in src/volume.hpp:
+- fatx::io_backend (src/io.hpp): the device, supplied by the application
+  (fatx::file_io for image files, fatx::memory_io for tests);
+- fatx::volume: open a partition, list/stat/read, create/write/mkdir/rename/
+  remove, label, flush;
+- fatx::probe, fatx::format (mkfs.fatx) and fatx::check (fsck.fatx -n / -a).
+Each volume has its own context, so several volumes can be used at once from
+different threads (one thread at a time per volume). Library messages go to a
+log sink instead of stdout/stderr (console::set_sink, console::scoped_sink).

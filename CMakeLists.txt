@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.30..3.31)
+cmake_minimum_required(VERSION 3.25...3.31)
 project(
   fatx
   VERSION 1.19
@@ -7,12 +7,14 @@ project(
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/scripts)
 
 # Fixer le type de build par défaut AVANT toute option qui en dépend
-if(NOT CMAKE_BUILD_TYPE)
+# (only when building FATX itself: an application embedding fatx_core through
+# add_subdirectory() keeps its own build type, warnings and tests)
+if(PROJECT_IS_TOP_LEVEL AND NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
 # Option pour activer les tests (OFF par défaut en Release)
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(PROJECT_IS_TOP_LEVEL AND CMAKE_BUILD_TYPE STREQUAL "Debug")
   option(BUILD_TESTS "Build test suite" ON)
 else()
   option(BUILD_TESTS "Build test suite" OFF)
@@ -22,20 +24,42 @@ option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
 option(SANITIZE "Enable sanitizers" OFF)
 set(FATX_DBGCR 48 CACHE STRING "Bytes per debug line for DBGCR (Debug builds)")
 
-include(CTest)
+if(PROJECT_IS_TOP_LEVEL)
+  include(CTest)
+endif()
 
-find_package(
-  Boost 1.65.0
-  COMPONENTS program_options
-  REQUIRED
-)
-find_package(Doxygen COMPONENTS dot)
-find_package(FUSE3 3.1 REQUIRED)
+# fatx_core (the filesystem library) needs only the Boost headers. The
+# command-line tools also need Boost.Program_options, and fusefatx needs FUSE3.
+if(POLICY CMP0167)
+  cmake_policy(SET CMP0167 NEW)
+endif()
+find_package(Boost 1.65.0 REQUIRED)
+option(FATX_BUILD_TOOLS "Build the fatx command-line tools (needs Boost.Program_options)" ${PROJECT_IS_TOP_LEVEL})
+if(FATX_BUILD_TOOLS)
+  find_package(Boost 1.65.0 COMPONENTS program_options REQUIRED)
+  find_package(FUSE3 3.1)
+  option(FATX_WITH_FUSE "Build fusefatx (needs FUSE3)" ${FUSE3_FOUND})
+  if(FATX_WITH_FUSE AND NOT FUSE3_FOUND)
+    message(FATAL_ERROR "FATX_WITH_FUSE=ON needs FUSE3 (libfuse3 development files)")
+  endif()
+else()
+  set(FATX_WITH_FUSE OFF)
+endif()
+if(PROJECT_IS_TOP_LEVEL)
+  find_package(Doxygen COMPONENTS dot)
+endif()
 
 # Marquer les bibliothèques tierces comme SYSTEM : leurs headers seront
 # compilés avec -isystem et n'amèneront pas de warnings
-set_target_properties(Boost::program_options PROPERTIES SYSTEM TRUE)
-set_target_properties(FUSE3::fuse3 PROPERTIES SYSTEM TRUE)
+if(TARGET Boost::headers)
+  set_target_properties(Boost::headers PROPERTIES SYSTEM TRUE)
+endif()
+if(FATX_BUILD_TOOLS)
+  set_target_properties(Boost::program_options PROPERTIES SYSTEM TRUE)
+endif()
+if(FATX_WITH_FUSE)
+  set_target_properties(FUSE3::fuse3 PROPERTIES SYSTEM TRUE)
+endif()
 
 # Chercher GoogleTest uniquement si les tests sont activés
 if(BUILD_TESTS)
@@ -58,13 +82,21 @@ if(BUILD_TESTS)
   endif()
 endif()
 
-set(CMAKE_CXX_STANDARD 26)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(PROJECT_IS_TOP_LEVEL)
+  set(CMAKE_CXX_STANDARD 26)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+endif()
 
 add_compile_options(
   -D_FILE_OFFSET_BITS=64
-  -fdiagnostics-color
   -DPACKAGE_VERSION=${PROJECT_VERSION}
+)
+# Warnings (GCC flags) and -Werror only when building FATX itself
+if(PROJECT_IS_TOP_LEVEL)
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag(-Wnrvo FATX_HAVE_WNRVO)
+add_compile_options(
+  -fdiagnostics-color
   -Wall
   -Wextra
   -Wpedantic
@@ -91,7 +123,7 @@ add_compile_options(
   -Wnoexcept
   -Wnoexcept-type
   -Wnon-virtual-dtor
-  -Wnrvo
+  $<$<BOOL:${FATX_HAVE_WNRVO}>:-Wnrvo>
   -Wnull-dereference
   -Wold-style-cast
   -Woverloaded-virtual
@@ -131,7 +163,8 @@ add_compile_options($<$<CONFIG:Debug>:$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Werror>>
 # -Wnull-dereference génère des faux positifs en Release via l'inlining agressif
 # de Boost.Bimap/multi_index dans les headers STL — supprimé en Release uniquement
 add_compile_options($<$<CONFIG:Release>:-Wno-null-dereference>)
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+endif()
+if(PROJECT_IS_TOP_LEVEL AND CMAKE_BUILD_TYPE STREQUAL "Debug")
   if(NOT FATX_DBGCR MATCHES "^[0-9]+$")
     message(FATAL_ERROR "FATX_DBGCR must be a positive integer")
   endif()
@@ -203,14 +236,13 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 endif()
 
-# Bibliothèque objet partagée entre fatx et fatx_tests (exclut fatx.cpp qui contient main)
-add_library(fatx_objects OBJECT
+# fatx_core: the filesystem library, without FUSE and without command-line
+# parsing. Embedding applications link it (see src/volume.hpp and src/io.hpp).
+add_library(fatx_core STATIC
   src/types.hpp
   src/constants.hpp
   src/context.hpp
   src/context.cpp
-  src/fuse_ops.hpp
-  src/fuse_ops.cpp
   src/device.hpp
   src/device.cpp
   src/frontend.hpp
@@ -223,9 +255,29 @@ add_library(fatx_objects OBJECT
   src/diskmap.cpp
   src/utils.hpp
   src/utils.cpp
+  src/io.hpp
+  src/io.cpp
+  src/actions.hpp
+  src/actions.cpp
+  src/volume.hpp
+  src/volume.cpp
 )
-target_include_directories(fatx_objects PUBLIC src)
-target_link_libraries(fatx_objects PUBLIC Boost::program_options FUSE3::fuse3)
+target_include_directories(fatx_core PUBLIC src)
+target_compile_features(fatx_core PUBLIC cxx_std_20)
+target_link_libraries(fatx_core PUBLIC Boost::headers)
+
+if(FATX_BUILD_TOOLS)
+# Bibliothèque objet partagée entre fatx et fatx_tests (exclut fatx.cpp qui contient main)
+add_library(fatx_objects OBJECT
+  src/frontend_args.cpp
+  $<$<BOOL:${FATX_WITH_FUSE}>:src/fuse_ops.hpp>
+  $<$<BOOL:${FATX_WITH_FUSE}>:src/fuse_ops.cpp>
+)
+target_link_libraries(fatx_objects PUBLIC fatx_core Boost::program_options)
+if(FATX_WITH_FUSE)
+  target_compile_definitions(fatx_objects PUBLIC FATX_WITH_FUSE=1)
+  target_link_libraries(fatx_objects PUBLIC FUSE3::fuse3)
+endif()
 
 add_executable(fatx src/fatx.cpp)
 target_link_libraries(fatx PRIVATE fatx_objects)
@@ -235,7 +287,10 @@ add_custom_target(
   ALL
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/scripts/test.sh ${PROJECT_BINARY_DIR}
 )
-set(aliases fusefatx mkfs.fatx label.fatx fsck.fatx unrm.fatx)
+set(aliases mkfs.fatx label.fatx fsck.fatx unrm.fatx)
+if(FATX_WITH_FUSE)
+  list(PREPEND aliases fusefatx)
+endif()
 foreach(i ${aliases})
   add_custom_target(
     ${i}
@@ -243,24 +298,37 @@ foreach(i ${aliases})
     COMMAND ${CMAKE_COMMAND} -E create_symlink fatx ${i}
     DEPENDS fatx
   )
-  install(FILES ${PROJECT_BINARY_DIR}/${i} TYPE SBIN)
+  if(PROJECT_IS_TOP_LEVEL)
+    install(FILES ${PROJECT_BINARY_DIR}/${i} TYPE SBIN)
+  endif()
 endforeach(i)
+endif()
 
+if(PROJECT_IS_TOP_LEVEL)
 enable_testing()
-# Tests unitaires avec GoogleTest
+# Tests of the embedding seams (log sink, contexts, io_backend, volume API):
+# need only fatx_core
 if(BUILD_TESTS AND (GTest_FOUND OR googletest_POPULATED))
+  add_executable(fatx_core_tests tests/test_core.cpp)
+  target_link_libraries(fatx_core_tests PRIVATE fatx_core GTest::gtest_main)
+  include(GoogleTest)
+  gtest_discover_tests(fatx_core_tests WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0:halt_on_error=1;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
+endif()
+# Tests unitaires avec GoogleTest
+if(BUILD_TESTS AND FATX_BUILD_TOOLS AND (GTest_FOUND OR googletest_POPULATED))
   add_executable(fatx_tests
     tests/test_context.cpp
     tests/test_device.cpp
     tests/test_diskmap.cpp
     tests/test_entry.cpp
     tests/test_frontend.cpp
-    tests/test_fuse_ops.cpp
-    tests/test_integration.cpp
+    $<$<BOOL:${FATX_WITH_FUSE}>:tests/test_fuse_ops.cpp>
+    $<$<BOOL:${FATX_WITH_FUSE}>:tests/test_integration.cpp>
     tests/test_partition.cpp
     tests/test_utils.cpp
   )
-  # fatx_objects propage PUBLIC : src/ includes + Boost + FUSE3
+  # fatx_objects propage PUBLIC : fatx_core (src/ includes, Boost) + FUSE3
   target_link_libraries(fatx_tests PRIVATE
     fatx_objects
     GTest::gtest_main GTest::gmock
@@ -284,7 +352,9 @@ if(BUILD_TESTS AND (GTest_FOUND OR googletest_POPULATED))
 endif()
 
 include(GNUInstallDirs)
-install(TARGETS fatx RUNTIME DESTINATION sbin)
+if(FATX_BUILD_TOOLS)
+  install(TARGETS fatx RUNTIME DESTINATION sbin)
+endif()
 
 # Génération des man pages depuis les sources Markdown (doc/man/*.8.md)
 find_program(PANDOC pandoc)
@@ -377,14 +447,25 @@ endif()
 
 set(CTEST_OUTPUT_ON_FAILURE 1)
 find_program(BASH NAMES bash)
+if(FATX_BUILD_TOOLS)
 execute_process(
   COMMAND ${BASH} ${PROJECT_SOURCE_DIR}/scripts/test.sh
 	OUTPUT_VARIABLE names
 )
+else()
+  set(names "")
+endif()
 list(LENGTH names nbtst)
 math(EXPR nb "${nbtst} - 1")
 foreach(i RANGE 0 ${nb})
+  if(nbtst EQUAL 0)
+    break()
+  endif()
   list(GET names ${i} test_name)
+  if(NOT FATX_WITH_FUSE AND test_name MATCHES "^Fuse_|^Label_check_noname$|^Unrm_remote|^Unrm_local")
+    message("-- Skipping test (needs fusefatx): ${test_name}")
+    continue()
+  endif()
   message("-- Found test: ${test_name}")
   add_test(NAME ${test_name} COMMAND ${BASH} test.sh ${i})
   if(SANITIZE)
@@ -502,3 +583,4 @@ if(VALGRIND_EXECUTABLE AND PYTHON3_EXECUTABLE AND BUILD_TESTS)
     VERBATIM
   )
 endif()
+endif() # PROJECT_IS_TOP_LEVEL

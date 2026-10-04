@@ -23,8 +23,8 @@
 #include "partition.hpp"
 #include "diskmap.hpp"
 #include "entry.hpp"
-#include "fuse_ops.hpp"
 
+#include <atomic>
 #include <cassert>
 
 #ifndef PACKAGE_VERSION
@@ -35,23 +35,44 @@
 	#define DBGCR					48
 #endif
 
+// The context is reached through fatx_context::get(). The command-line tools
+// use one process-wide context (set()). An embedding application can use
+// several contexts at once, each on one thread at a time: it installs the
+// context it works on with a fatx_context::scope, and get() returns it on that
+// thread. A context constructed while a scope is active becomes that scope's
+// context instead of the process-wide one.
 class								fatx_context {
 private:
-	static fatx_context*			fatxc;
+	struct							local_t {
+		bool						active = false;
+		fatx_context*				ctx = nullptr;
+	};
+	static std::atomic<fatx_context*>	fatxc;
+	static thread_local local_t		local;
 public:
+	class							scope {
+	private:
+		local_t						previous;
+	public:
+		explicit					scope(fatx_context* = nullptr);
+									~scope();
+									scope(const scope&) = delete;
+		scope&						operator = (const scope&) = delete;
+	};
 	frontend&						mmi;
 	device							dev;
 	partition						par;
 	dskmap*							fat;
 	entry*							root;
 	bool							ready;
+	bool							inconsistent;	// setup() found errors that fsck.fatx would correct
 
 									fatx_context(frontend&);
 									~fatx_context();
 	[[nodiscard]] int				setup();
 	void							destroy();
-	static fatx_context*			get() { return fatxc; }
-	static void						set(fatx_context* const fc) { fatxc = fc; }
+	static fatx_context*			get() { return local.active ? local.ctx : fatxc.load(std::memory_order_relaxed); }
+	static void						set(fatx_context* const fc) { fatxc.store(fc, std::memory_order_relaxed); }
 };
 
 namespace clsarithm {

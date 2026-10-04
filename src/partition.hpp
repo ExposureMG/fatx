@@ -18,7 +18,9 @@
  */
 
 #include <cstdint>
+#include <map>
 #include <string>
+#include <utility>
 
 #include "utils.hpp"
 
@@ -76,6 +78,13 @@ private:
     public:
     };
 public:
+    // partition tables: table -> partition -> (offset, size or 0 for "up to the end")
+    using scheme_t = std::map<const std::string, std::map<const std::string, const std::pair<streamptr, streamptr>>>;
+    // human readable names of tables and partitions
+    using labels_t = std::map<const std::string, const std::string>;
+    static scheme_t					scheme();
+    static labels_t					labels();
+
     uint32_t						par_id;
     std::string						par_label;
     streamptr						par_start;

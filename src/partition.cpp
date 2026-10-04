@@ -37,12 +37,8 @@ namespace {
 	clus_num(0),			clus_fat(0),			chain_size(0),			chain_pow(0),			fat_start(0),			fat_size(0),
 	root_start(0),			root_clus(0) {
 }
-int							partition::		setup() {
-	uint64_t ts = fatx_context::get()->dev.size();
-	bool found = false;
-	if(fatx_context::get()->mmi.verbose)
-		console::write("Support size: {}.\n", ts);
-	std::map<const std::string, std::map<const std::string, const std::pair<streamptr, streamptr>>> sch = {
+partition::scheme_t			partition::		scheme() {
+	return {
 		{ "file", {
 			{ "x2",		{	0x0,			0x0			}}
 		}},
@@ -65,7 +61,9 @@ int							partition::		setup() {
 			{ "x2",		{	0x130eb0000,	0x0			}}
 		}}
 	};
-	std::map<const std::string, const std::string> names = {
+}
+partition::labels_t			partition::		labels() {
+	return {
 		{ "file",	"plain file" },
 		{ "mu",		"memory unit" },
 		{ "usb",	"USB drive" },
@@ -79,6 +77,14 @@ int							partition::		setup() {
 		{ "x1",		"original Xbox compatibility" },
 		{ "x2",		"data" }
 	};
+}
+int							partition::		setup() {
+	uint64_t ts = fatx_context::get()->dev.size();
+	bool found = false;
+	if(fatx_context::get()->mmi.verbose)
+		console::write("Support size: {}.\n", ts);
+	auto sch = scheme();
+	auto names = labels();
 	std::map<const std::string, std::set<std::string>> cap;
 	for(const auto &i: sch) {
 		if(ts <= std::ranges::find_if(i.second, [] (const auto j) noexcept { return j.second.second == 0; })->second.first)

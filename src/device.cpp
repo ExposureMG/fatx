@@ -186,7 +186,12 @@ bool					device::chgfile::	addseg(std::fstream& iod, streamptr p, const std::str
 }
 int						device::			setup() {
 	bool err = false;
-	if(fatx_context::get()->mmi.table != "usb") {
+	if(fatx_context::get()->mmi.backend) {
+		backend = fatx_context::get()->mmi.backend;
+		tot_size = backend->size();
+		err = fatx_context::get()->mmi.writeable() && fatx_context::get()->mmi.diffile.empty() && !backend->writable();
+	}
+	else if(fatx_context::get()->mmi.table != "usb") {
 		err = err || (io = std::fstream(fatx_context::get()->mmi.input, std::ios::binary | (
 			fatx_context::get()->mmi.writeable() && fatx_context::get()->mmi.diffile.empty() ? (std::ios::out | std::ios::in) : std::ios::in
 		)))
@@ -297,8 +302,9 @@ int						device::			setup() {
 		for(auto &i: usbd)
 			i.second.close();
 		usbd.clear();
+		backend.reset();
 		console::write("Error opening {}{} for read{}\n", true,
-			fatx_context::get()->mmi.input,
+			fatx_context::get()->mmi.backend ? std::string("device") : fatx_context::get()->mmi.input,
 			fatx_context::get()->mmi.diffile.empty() ? "" : (":" + fatx_context::get()->mmi.diffile),
 			fatx_context::get()->mmi.writeable() ? "/write" : ""
 		);
@@ -323,7 +329,9 @@ byte_buffer             device::            read_bytes(streamptr p, size_t s) {
 	res.resize(s, std::byte{0});
 	bool status = false;
 	authd.lock();
-	if(usbd.empty()) {
+	if(backend)
+		status = !backend->read_at(p, std::span<std::byte>(res.data(), res.size()));
+	else if(usbd.empty()) {
 		status = status || io
 			.seekg(static_cast<std::basic_istream<char>::off_type>(p))
 			.read(reinterpret_cast<char*>(res.data()), static_cast<std::streamsize>(s))
@@ -395,6 +403,8 @@ int                     device::            write_bytes(streamptr p, byte_view b
 				raw[i] = static_cast<char>(bytes[i]);
 			status = status || chgf.write(iod, p, raw);
 		}
+		else if(backend)
+			status = !backend->write_at(p, bytes);
 		else if(usbd.empty()) {
 			status = status || io
 				.seekp(static_cast<std::basic_istream<char>::off_type>(p))
@@ -440,6 +450,20 @@ int                     device::            write_bytes(streamptr p, byte_view b
 	#endif
 	authd.unlock();
 	return 0;
+}
+int						device::			sync() {
+	bool status = false;
+	authd.lock();
+	if(backend)
+		status = !backend->flush();
+	if(io.is_open())
+		status = io.flush().fail() || status;
+	if(iod.is_open())
+		status = iod.flush().fail() || status;
+	for(auto &i: usbd)
+		status = i.second.flush().fail() || status;
+	authd.unlock();
+	return status ? EIO : 0;
 }
 #ifndef NDEBUG
 std::string				device::			address(streamptr p) {

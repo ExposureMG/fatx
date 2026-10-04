@@ -285,10 +285,32 @@ void						mymutx::		unlock_shared() {
 
 // Implémentation des méthodes de la classe console
 
+namespace {
+console::sink_t					global_sink;					// process-wide sink (empty: stdout/stderr)
+thread_local const console::sink_t*	thread_sink = nullptr;		// per-thread sink (console::scoped_sink)
+}
+
+							console::scoped_sink::	scoped_sink(const sink_t &s) : previous(thread_sink) {
+	thread_sink = &s;
+}
+							console::scoped_sink::	~scoped_sink() {
+	thread_sink = previous;
+}
+void						console::		set_sink(sink_t s) {
+	global_sink = std::move(s);
+}
+void						console::		emit(level l, const std::string &s) {
+	if(thread_sink != nullptr && *thread_sink)
+		(*thread_sink)(l, s);
+	else if(global_sink)
+		global_sink(l, s);
+	else
+		(l == level::info ? std::cout : std::cerr) << s;
+}
 std::pair<bool, bool>		console::		read() {
 	char c, d;
 	c = d = static_cast<char>(std::cin.get());
-	while(d != '\n')
+	while(d != '\n' && std::cin)
 		d = static_cast<char>(std::cin.get());
 	return ((c == 'y') || (c == 'Y')) ? std::make_pair(true, true) : ((c == 'n') || (c == 'N')) ? std::make_pair(true, false) : std::make_pair(false, false);
 }

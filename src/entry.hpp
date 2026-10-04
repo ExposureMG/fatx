@@ -155,7 +155,14 @@ class								attrib {
         }
         void							operator () (time_t t)
         {
-            const struct tm *st(localtime(&t));
+            // localtime() shares one buffer between threads, and several
+            // contexts may be used on different threads at the same time
+            struct tm stb;
+            #ifdef _WIN32
+                const struct tm *st(localtime_s(&stb, &t) == 0 ? &stb : nullptr);
+            #else
+                const struct tm *st(localtime_r(&t, &stb));
+            #endif
             if(st != nullptr) {
                 year	= static_cast<unsigned int>(st->tm_year + 1900);
                 month	= static_cast<unsigned int>(st->tm_mon + 1);

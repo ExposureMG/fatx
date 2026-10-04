@@ -49,6 +49,10 @@
  */
 
 #include "context.hpp"
+#include "actions.hpp"
+#ifdef FATX_WITH_FUSE
+	#include "fuse_ops.hpp"
+#endif
 
 #include <iostream>
 #include <vector>
@@ -104,6 +108,7 @@ int main(int argc, char *argv[]) {
 		fatx_context::get()->fat->fatcheck();
 	}
 	if(mmi.prog == frontend::fuse) {
+	#ifdef FATX_WITH_FUSE
 		int fuse_argc = 0;
 		char *fuse_argv[max_fuse_args];
 		std::vector<std::unique_ptr<std::string>> vp;
@@ -160,32 +165,16 @@ int main(int argc, char *argv[]) {
 		#ifndef NDEBUG
 			dbglog("Fuse returned: {}", err);
 		#endif
+	#else
+		console::write("{} was built without FUSE support.\n", true, mmi.name());
+		err = ENOTSUP;
+	#endif
 	}
 	bool answ = false;
 	if(mmi.prog == frontend::mkfs) {
 		console::write("Are you sure you want to erase all data in {} ?", mmi.input);
 		if((answ = mmi.getanswer(false))) {
-			bool status = false;
-			console::write("Creating new FATX filesystem");
-			status = status || fatx_context::get()->par.write();
-			console::write(".");
-			fatx_context::get()->fat->erase();
-			console::write(".");
-			byte_buffer zeros(static_cast<byte_buffer::size_type>(fatx_context::get()->par.clus_size), std::byte{0});
-			status = status || fatx_context::get()->dev.write_bytes(
-				fatx_context::get()->par.root_start,
-				byte_view(zeros.data(), zeros.size())
-			);
-			console::write(".");
-			if(!status) {
-				fatx_context::get()->root = new entry("", 0, true);
-				fatx_context::get()->root->parent = fatx_context::get()->root;
-				fatx_context::get()->root->status = entry::valid;
-				console::write("done.\n");
-				console::write("FATX filesystem created with {} clusters.\n", fatx_context::get()->par.clus_fat);
-			}
-			else
-				console::write("Unable to create FATX filesystem.\n");
+			void(fatx::actions::make_filesystem());
 			if(mmi.volname.empty())
 				mmi.volname = def_label;
 		}
@@ -193,19 +182,7 @@ int main(int argc, char *argv[]) {
 	if((mmi.prog == frontend::mkfs && answ) || (mmi.prog == frontend::label && !mmi.volname.empty())) {
 		if(mmi.prog == frontend::label)
 			fatx_context::get()->fat->gapcheck();
-		fatx_context::get()->par.par_label = fatx_context::get()->mmi.volname;
-		unsigned char lab[slab];
-		entry *idx = fatx_context::get()->root->find(flab);
-		filesize s = fatx_context::get()->par.label(lab);
-		bool status = false;
-		if(idx == nullptr) {
-			status = status || fatx_context::get()->root->addtodir(new entry(flab, 0, false));
-			idx = fatx_context::get()->root->find(flab);
-			assert(idx != nullptr);
-			idx->flags.lab = true;
-			status = status || idx->write(true);
-		}
-		if(!status && !idx->resize(s) && !idx->data(reinterpret_cast<char*>(lab), false, 0, s))
+		if(!fatx::actions::write_label(fatx_context::get()->mmi.volname))
 			console::write("Volume label has been changed to {}\n", fatx_context::get()->par.par_label);
 		else
 			console::write("Unable to change volume label.\n");

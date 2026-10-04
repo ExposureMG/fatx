@@ -17,6 +17,7 @@
  */
 
 #include "context.hpp"
+#include "fuse_ops.hpp"
 
 #include <mutex>
 

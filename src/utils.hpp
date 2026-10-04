@@ -26,7 +26,8 @@
 #include <iostream>
 #include <format>
 #include <shared_mutex>
- 
+#include <functional>
+
 #include <boost/integer.hpp>
 #include <boost/bimap.hpp>
 #include <boost/bimap/list_of.hpp>
@@ -274,21 +275,39 @@ void		read_cache<key_t, value_t>::
 }
 #endif
 
+// Console output. Every message goes through a log sink. Without a sink
+// (the command-line tools), messages go to stdout/stderr as before. An
+// embedding application installs a sink, either for the whole process
+// (set_sink) or for the current thread (console::scoped_sink).
+//
 class								console {
 public:
+	enum class						level { info, error, debug };
+	using sink_t = std::function<void(level, const std::string &)>;
+	class							scoped_sink {
+	private:
+		const sink_t*				previous;
+	public:
+		explicit					scoped_sink(const sink_t &);
+									~scoped_sink();
+									scoped_sink(const scoped_sink &) = delete;
+		scoped_sink&				operator = (const scoped_sink &) = delete;
+	};
 	template <typename... Targs>
 	static void						write(const std::string &, Targs...);
 	template <typename... Targs>
 	static void						write(const std::string &, bool, Targs...);
+	static void						emit(level, const std::string &);
+	static void						set_sink(sink_t);
 	static std::pair<bool, bool>	read();
 };
 template <typename... Targs>
 void					console::	write(const std::string &s, Targs... args) {
-	std::cout << std::vformat(s, std::make_format_args(args...));
+	emit(level::info, std::vformat(s, std::make_format_args(args...)));
 }
 template <typename... Targs>
 void					console::	write(const std::string &s, bool err, Targs... args) {
-	(err ? std::cerr : std::cout) << std::vformat(s, std::make_format_args(args...));
+	emit(err ? level::error : level::info, std::vformat(s, std::make_format_args(args...)));
 }
 
 // File name validation
@@ -312,6 +331,6 @@ template <typename... Targs>
 inline void							dbglog(const std::string &s, Targs... args) {
 	std::istringstream flux(std::vformat(s, std::make_format_args(args...)));
 	for(std::string line; std::getline(flux, line);)
-		console::write("# {:016X} {}\n", true, std::hash<std::thread::id>{}(std::this_thread::get_id()), line);
+		console::emit(console::level::debug, std::format("# {:016X} {}\n", std::hash<std::thread::id>{}(std::this_thread::get_id()), line));
 }
 #endif

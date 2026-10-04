@@ -17,10 +17,24 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <memory>
 #include <string>
 #include <vector>
+#include <sys/stat.h>
 
 #include "types.hpp"
+#include "io.hpp"
+
+#ifdef _WIN32
+using uid_t                         = unsigned int;
+using gid_t                         = unsigned int;
+inline uid_t                        fatx_getuid() { return 0; }
+inline gid_t                        fatx_getgid() { return 0; }
+#else
+#include <unistd.h>
+inline uid_t                        fatx_getuid() { return getuid(); }
+inline gid_t                        fatx_getgid() { return getgid(); }
+#endif
 
 class								frontend {
     private:
@@ -72,6 +86,8 @@ class								frontend {
         std::string						input;
         std::string						script;
         std::string						diffile;
+        std::shared_ptr<fatx::io_backend>	backend;	// when set, used instead of opening input
+        unsigned int					asked;		// number of questions asked (problems found by fsck)
     
                                         frontend(int, const char *const * const);
         std::string						name() const;
