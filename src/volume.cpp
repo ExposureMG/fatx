@@ -348,7 +348,7 @@ volume_info							volume::		info() {
 	return i;
 }
 
-int									volume::		stat(const std::string &path, entry_info &out) {
+int									volume::		lookup(const std::string &path, entry_info &out) {
 	return guarded([&] () -> int {
 		session s(d->sink, d->ctx.get());
 		entry *e = d->ctx->root->find(path.c_str());

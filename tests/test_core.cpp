@@ -52,7 +52,7 @@ std::unique_ptr<fatx::volume> open_rw(const std::shared_ptr<fatx::io_backend> &d
 
 std::vector<std::byte> read_all(fatx::volume &v, const std::string &path) {
 	fatx::entry_info info;
-	EXPECT_EQ(v.stat(path, info), 0);
+	EXPECT_EQ(v.lookup(path, info), 0);
 	std::vector<std::byte> out(info.size);
 	size_t got = 0;
 	EXPECT_EQ(v.read(path, 0, out, &got), 0);
@@ -268,9 +268,9 @@ TEST(Volume, FormatAndInfo) {
 	EXPECT_EQ(root[0].name, "name.txt");
 	EXPECT_TRUE(root[0].label);
 	fatx::entry_info st;
-	EXPECT_EQ(v->stat("/", st), 0);
+	EXPECT_EQ(v->lookup("/", st), 0);
 	EXPECT_TRUE(st.directory);
-	EXPECT_EQ(v->stat("/missing", st), ENOENT);
+	EXPECT_EQ(v->lookup("/missing", st), ENOENT);
 	EXPECT_EQ(v->list("/name.txt", root), ENOTDIR);
 }
 
@@ -323,13 +323,13 @@ TEST(Volume, WriteReadRenameRemove) {
 		EXPECT_EQ(v->rename("/empty", "/Default.xex"), EEXIST);
 		ASSERT_EQ(v->rename("/empty", "/Default.xex", true), 0);	// replaces the file
 		fatx::entry_info st;
-		ASSERT_EQ(v->stat("/Default.xex", st), 0);
+		ASSERT_EQ(v->lookup("/Default.xex", st), 0);
 		EXPECT_EQ(st.size, 0u);
-		EXPECT_EQ(v->stat("/empty", st), ENOENT);
+		EXPECT_EQ(v->lookup("/empty", st), ENOENT);
 		// remove a file and a folder tree
 		ASSERT_EQ(v->create("/Content/0000000000000000/a", 5), 0);
 		ASSERT_EQ(v->remove("/Content"), 0);
-		EXPECT_EQ(v->stat("/Content", st), ENOENT);
+		EXPECT_EQ(v->lookup("/Content", st), ENOENT);
 		EXPECT_EQ(v->remove("/name.txt"), EPERM);
 		EXPECT_EQ(v->remove("/"), EINVAL);
 		ASSERT_EQ(v->flush(), 0);
@@ -554,8 +554,8 @@ TEST(Fixes, MoveToRoot) {
 	ASSERT_EQ(v->create("/d/e/f", 10), 0);
 	ASSERT_EQ(v->rename("/d/e", "/e"), 0);
 	fatx::entry_info st;
-	EXPECT_EQ(v->stat("/e/f", st), 0);
-	EXPECT_EQ(v->stat("/d/e", st), ENOENT);
+	EXPECT_EQ(v->lookup("/e/f", st), 0);
+	EXPECT_EQ(v->lookup("/d/e", st), ENOENT);
 	v.reset();
 	expect_clean(dev);
 }
@@ -641,7 +641,7 @@ TEST(Fixes, BracesInNames) {
 	}
 	auto v = open_rw(dev);
 	fatx::entry_info st;
-	EXPECT_EQ(v->stat("/{x}/a}b{", st), 0);
+	EXPECT_EQ(v->lookup("/{x}/a}b{", st), 0);
 	ASSERT_EQ(v->rename("/{x}/a}b{", "/{}"), 0);
 	v.reset();
 	expect_clean(dev);

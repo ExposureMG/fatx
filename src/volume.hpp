@@ -116,7 +116,7 @@ public:
 
 	// Volume information (free_clusters scans the FAT on first use).
 	[[nodiscard]] volume_info		info();
-	[[nodiscard]] int				stat(const std::string &path, entry_info &out);
+	[[nodiscard]] int				lookup(const std::string &path, entry_info &out);	// (not "stat": a macro on MinGW)
 	// Lists a directory (valid entries only, in on-disk order).
 	[[nodiscard]] int				list(const std::string &path, std::vector<entry_info> &out);
 	// Reads up to out.size() bytes of a file at offset; *got receives the count.
