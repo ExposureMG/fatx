@@ -781,10 +781,10 @@ TEST_F(PartitionSetupTest, Setup_KitTable_Mkfs_NoCrop) {
     ctx->mmi.partition = "x2";
     // table=="kit" + prog=mkfs → dh.id!=0x00020000 → dh=devheader(ts)
     // p2_start*512 >> taille fichier → read_bytes() renvoie des zéros → has_fsid() échoue → found=false
-    // mkfs + found=false → calcule partition par défaut sans erreur
+    // mkfs + found=false → the kit partitions are outside the 4 MiB file:
+    // no room for a filesystem
     int res = ctx->par.setup();
-    // Attendu : 0 (mkfs tolère l'absence de FATX)
-    EXPECT_EQ(res, 0);
+    EXPECT_EQ(res, ENOSPC);
 }
 
 // table="kit" + prog=fsck → ENODATA (pas de FATX aux offsets kit)
@@ -808,7 +808,8 @@ TEST_F(PartitionSetupTest, Write_KitTable) {
     test_file = make_fatx_file(0x400000);
     setup_context(test_file, frontend::fsck);
     ctx->mmi.table = "kit";
-    ASSERT_EQ(ctx->par.setup(), 0);
+    // no kit header: the partition found has no valid geometry
+    EXPECT_EQ(ctx->par.setup(), EINVAL);
     ctx->mmi.table = "kit";  // remet "kit" après setup()
     // partition::write() avec table=="kit" → devheader(dev.size()).write(buf) + dev.write_bytes(0, ...)
     int res = ctx->par.write();

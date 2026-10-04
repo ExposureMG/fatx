@@ -133,6 +133,7 @@ int							partition::		setup() {
 	}
 	else if(fatx_context::get()->mmi.table == "kit") {
 		byte_buffer header = fatx_context::get()->dev.read_bytes(0);
+		header.resize(blksize, std::byte{0});
 		devheader dh(reinterpret_cast<const char*>(header.data()));
 		if(dh.id != 0x00020000 && fatx_context::get()->mmi.prog == frontend::mkfs)
 			dh = devheader(ts);
@@ -183,6 +184,8 @@ int							partition::		setup() {
 		if(fatx_context::get()->mmi.verbose)
 			console::write("Using {} partition in {} table.\n", names[fatx_context::get()->mmi.partition], names[fatx_context::get()->mmi.table]);
 		byte_buffer boot = fatx_context::get()->dev.read_bytes(par_start);
+		if(boot.size() != blksize)
+			return EIO;
 		bootsect	bs(reinterpret_cast<const char*>(boot.data()));
 		par_id		= bs.id;
 		root_clus	= bs.root;
@@ -219,6 +222,15 @@ int							partition::		setup() {
 	fat_size	= clus_num * chain_size;
 	fat_size	+= (0x1000 - (fat_size % 0x1000));
 	root_start	= fat_start + fat_size;
+	if(par_start > ts || par_size > ts - par_start || par_size < (root_start - par_start) + 2 * static_cast<uint64_t>(clus_size)) {
+		// the FAT and at least one data cluster must fit in the device
+		if(fatx_context::get()->mmi.prog == frontend::mkfs) {
+			console::write("No space for a FATX filesystem.\n", true);
+			return ENOSPC;
+		}
+		console::write("Invalid partition geometry (partition 0x{:X} bytes at 0x{:X}, device 0x{:X} bytes).\n", true, par_size, par_start, ts);
+		return EINVAL;
+	}
 	clus_fat	= static_cast<uint32_t>(((par_size - (root_start - par_start)) >> clus_pow) - 1);
 	if(root_clus < 1 || root_clus > clus_fat) {
 		root_clus = 1;

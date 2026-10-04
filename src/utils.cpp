@@ -72,7 +72,7 @@ vareas						vareas::		sub(filesize s, filesize o) const {
 	for(area& i: res) {
 		filesize ns = i.size;
 		filesize no = i.offset;
-		if(o > i.offset && o < i.offset + i.size - 1) {
+		if(o > i.offset && o < i.offset + i.size) {
 			no			= o;
 			i.pointer	+= o - i.offset;
 			ns			-= o - i.offset;

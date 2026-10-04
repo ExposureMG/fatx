@@ -70,6 +70,20 @@ public:
 	console::sink_t					sink() { return [this](console::level l, const std::string &s) { add(l, s); }; }
 };
 
+// Errors inside the library must not escape as exceptions into the application.
+template<typename F>
+int									guarded(F &&f) noexcept {
+	try {
+		return f();
+	}
+	catch(const std::bad_alloc &) {
+		return ENOMEM;
+	}
+	catch(...) {
+		return EIO;
+	}
+}
+
 // Every call into the library runs inside a session: the volume's context is
 // the current one and the library's messages go to the volume's sink.
 class								session {
@@ -298,10 +312,11 @@ std::unique_ptr<volume>				volume::		open(std::shared_ptr<io_backend> device, co
 	if(err == 0) {
 		d.mmi->set_readonly(!writable);
 		session s(d.sink, nullptr);
-		d.ctx = std::make_unique<fatx_context>(*d.mmi);
-		err = d.ctx->setup();
-		if(err == 0 && d.ctx->root == nullptr)
-			err = EIO;
+		err = guarded([&d] () -> int {
+			d.ctx = std::make_unique<fatx_context>(*d.mmi);
+			int res = d.ctx->setup();
+			return res == 0 && d.ctx->root == nullptr ? EIO : res;
+		});
 		if(err)
 			d.ctx.reset();
 	}
@@ -312,6 +327,8 @@ std::unique_ptr<volume>				volume::		open(std::shared_ptr<io_backend> device, co
 
 volume_info							volume::		info() {
 	session s(d->sink, d->ctx.get());
+	uint64_t free_clusters = 0;
+	void(guarded([this, &free_clusters] () -> int { free_clusters = d->ctx->fat->clsavail(); return 0; }));
 	const partition &p = d->ctx->par;
 	volume_info i;
 	i.label = p.par_label;
@@ -320,7 +337,7 @@ volume_info							volume::		info() {
 	i.partition_size = p.par_size;
 	i.cluster_size = p.clus_size;
 	i.cluster_count = p.clus_fat;
-	i.free_clusters = d->ctx->fat->clsavail();
+	i.free_clusters = free_clusters;
 	i.root_cluster = static_cast<uint32_t>(p.root_clus);
 	i.fat_entry_size = p.chain_size;
 	i.fat_offset = p.fat_start;
@@ -332,218 +349,238 @@ volume_info							volume::		info() {
 }
 
 int									volume::		stat(const std::string &path, entry_info &out) {
-	session s(d->sink, d->ctx.get());
-	entry *e = d->ctx->root->find(path.c_str());
-	if(e == nullptr)
-		return ENOENT;
-	out = to_info(*e);
-	if(e == d->ctx->root)
-		out.name.clear();
-	return 0;
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		entry *e = d->ctx->root->find(path.c_str());
+		if(e == nullptr)
+			return ENOENT;
+		out = to_info(*e);
+		if(e == d->ctx->root)
+			out.name.clear();
+		return 0;
+	});
 }
 
 int									volume::		list(const std::string &path, std::vector<entry_info> &out) {
-	session s(d->sink, d->ctx.get());
-	out.clear();
-	entry *e = d->ctx->root->find(path.c_str());
-	if(e == nullptr)
-		return ENOENT;
-	if(!e->flags.dir)
-		return ENOTDIR;
-	for(const ptr_entry &c: e->childs) {
-		if(c->status == entry::valid)
-			out.push_back(to_info(*c));
-	}
-	return 0;
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		out.clear();
+		entry *e = d->ctx->root->find(path.c_str());
+		if(e == nullptr)
+			return ENOENT;
+		if(!e->flags.dir)
+			return ENOTDIR;
+		for(const ptr_entry &c: e->childs) {
+			if(c->status == entry::valid)
+				out.push_back(to_info(*c));
+		}
+		return 0;
+	});
 }
 
 int									volume::		read(const std::string &path, uint64_t offset, std::span<std::byte> out, std::size_t *got) {
-	session s(d->sink, d->ctx.get());
-	if(got)
-		*got = 0;
-	entry *e = d->ctx->root->find(path.c_str());
-	if(e == nullptr)
-		return ENOENT;
-	if(e->flags.dir)
-		return EISDIR;
-	if(offset >= e->size || out.empty())
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		if(got)
+			*got = 0;
+		entry *e = d->ctx->root->find(path.c_str());
+		if(e == nullptr)
+			return ENOENT;
+		if(e->flags.dir)
+			return EISDIR;
+		if(offset >= e->size || out.empty())
+			return 0;
+		const filesize n = std::min<filesize>(out.size(), e->size - offset);
+		int res = e->data(reinterpret_cast<char*>(out.data()), true, offset, n);
+		if(res)
+			return res;
+		if(got)
+			*got = static_cast<std::size_t>(n);
 		return 0;
-	const filesize n = std::min<filesize>(out.size(), e->size - offset);
-	int res = e->data(reinterpret_cast<char*>(out.data()), true, offset, n);
-	if(res)
-		return res;
-	if(got)
-		*got = static_cast<std::size_t>(n);
-	return 0;
+	});
 }
 
 int									volume::		create(const std::string &path, uint64_t size) {
-	session s(d->sink, d->ctx.get());
-	if(!d->writable)
-		return EROFS;
-	std::string dir, name;
-	if(!split(path, dir, name))
-		return EINVAL;
-	if(int res = validate_name(name))
-		return res;
-	if(size > 0xFFFFFFFFULL)
-		return EFBIG;		// sizes are 32-bit on disk
-	entry *p = d->ctx->root->find(dir.c_str());
-	if(p == nullptr)
-		return ENOENT;
-	if(!p->flags.dir)
-		return ENOTDIR;
-	if(child(p, name, true) != nullptr)
-		return EEXIST;
-	entry *n = new entry(name, size, false);
-	if(size != 0 && (n->cluster == 0 || n->cluster == FLK || n->size != size)) {
-		discard(n);
-		return ENOSPC;
-	}
-	if(int res = p->addtodir(n)) {
-		discard(n);
-		return res == EFAULT ? EIO : res;
-	}
-	return 0;
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		if(!d->writable)
+			return EROFS;
+		std::string dir, name;
+		if(!split(path, dir, name))
+			return EINVAL;
+		if(int res = validate_name(name))
+			return res;
+		if(size > 0xFFFFFFFFULL)
+			return EFBIG;		// sizes are 32-bit on disk
+		entry *p = d->ctx->root->find(dir.c_str());
+		if(p == nullptr)
+			return ENOENT;
+		if(!p->flags.dir)
+			return ENOTDIR;
+		if(child(p, name, true) != nullptr)
+			return EEXIST;
+		entry *n = new entry(name, size, false);
+		if(size != 0 && (n->cluster == 0 || n->cluster == FLK || n->size != size)) {
+			discard(n);
+			return ENOSPC;
+		}
+		if(int res = p->addtodir(n)) {
+			discard(n);
+			return res == EFAULT ? EIO : res;
+		}
+		return 0;
+	});
 }
 
 int									volume::		write(const std::string &path, uint64_t offset, std::span<const std::byte> data) {
-	session s(d->sink, d->ctx.get());
-	if(!d->writable)
-		return EROFS;
-	entry *e = d->ctx->root->find(path.c_str());
-	if(e == nullptr)
-		return ENOENT;
-	if(e->flags.dir)
-		return EISDIR;
-	if(data.empty())
-		return 0;
-	if(offset + data.size() > 0xFFFFFFFFULL)
-		return EFBIG;
-	if(int res = load_areas(e))
-		return res;
-	// entry::data() takes a non-const buffer but does not modify it on write
-	return e->data(const_cast<char*>(reinterpret_cast<const char*>(data.data())), false, offset, data.size());
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		if(!d->writable)
+			return EROFS;
+		entry *e = d->ctx->root->find(path.c_str());
+		if(e == nullptr)
+			return ENOENT;
+		if(e->flags.dir)
+			return EISDIR;
+		if(data.empty())
+			return 0;
+		if(offset + data.size() > 0xFFFFFFFFULL)
+			return EFBIG;
+		if(int res = load_areas(e))
+			return res;
+		// entry::data() takes a non-const buffer but does not modify it on write
+		return e->data(const_cast<char*>(reinterpret_cast<const char*>(data.data())), false, offset, data.size());
+	});
 }
 
 int									volume::		truncate(const std::string &path, uint64_t size) {
-	session s(d->sink, d->ctx.get());
-	if(!d->writable)
-		return EROFS;
-	entry *e = d->ctx->root->find(path.c_str());
-	if(e == nullptr)
-		return ENOENT;
-	if(e->flags.dir)
-		return EISDIR;
-	if(size > 0xFFFFFFFFULL)
-		return EFBIG;
-	if(int res = load_areas(e))
-		return res;
-	return e->resize(size);
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		if(!d->writable)
+			return EROFS;
+		entry *e = d->ctx->root->find(path.c_str());
+		if(e == nullptr)
+			return ENOENT;
+		if(e->flags.dir)
+			return EISDIR;
+		if(size > 0xFFFFFFFFULL)
+			return EFBIG;
+		if(int res = load_areas(e))
+			return res;
+		return e->resize(size);
+	});
 }
 
 int									volume::		mkdir(const std::string &path) {
-	session s(d->sink, d->ctx.get());
-	if(!d->writable)
-		return EROFS;
-	std::string dir, name;
-	if(!split(path, dir, name))
-		return EINVAL;
-	if(int res = validate_name(name))
-		return res;
-	entry *p = d->ctx->root->find(dir.c_str());
-	if(p == nullptr)
-		return ENOENT;
-	if(!p->flags.dir)
-		return ENOTDIR;
-	if(child(p, name, true) != nullptr)
-		return EEXIST;
-	entry *n = new entry(name, 0, true);
-	if(n->cluster == 0 || n->cluster == FLK) {
-		discard(n);
-		return ENOSPC;
-	}
-	if(int res = p->addtodir(n)) {
-		discard(n);
-		return res == EFAULT ? EIO : res;
-	}
-	return 0;
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		if(!d->writable)
+			return EROFS;
+		std::string dir, name;
+		if(!split(path, dir, name))
+			return EINVAL;
+		if(int res = validate_name(name))
+			return res;
+		entry *p = d->ctx->root->find(dir.c_str());
+		if(p == nullptr)
+			return ENOENT;
+		if(!p->flags.dir)
+			return ENOTDIR;
+		if(child(p, name, true) != nullptr)
+			return EEXIST;
+		entry *n = new entry(name, 0, true);
+		if(n->cluster == 0 || n->cluster == FLK) {
+			discard(n);
+			return ENOSPC;
+		}
+		if(int res = p->addtodir(n)) {
+			discard(n);
+			return res == EFAULT ? EIO : res;
+		}
+		return 0;
+	});
 }
 
 int									volume::		rename(const std::string &from, const std::string &to, bool replace) {
-	session s(d->sink, d->ctx.get());
-	if(!d->writable)
-		return EROFS;
-	entry *e = d->ctx->root->find(from.c_str());
-	if(e == nullptr)
-		return ENOENT;
-	if(e == d->ctx->root)
-		return EINVAL;
-	if(e->flags.lab)
-		return EPERM;
-	std::string dir, name;
-	if(!split(to, dir, name))
-		return EINVAL;
-	if(int res = validate_name(name))
-		return res;
-	entry *p = d->ctx->root->find(dir.c_str());
-	if(p == nullptr)
-		return ENOENT;
-	if(!p->flags.dir)
-		return ENOTDIR;
-	for(entry *a = p; a != nullptr && a != d->ctx->root; a = a->parent) {
-		if(a == e)
-			return EINVAL;		// into itself
-	}
-	if(entry *existing = child(p, name, true); existing != nullptr && existing != e) {
-		if(!replace || existing->flags.dir || e->flags.dir || existing->flags.lab)
-			return EEXIST;
-		entry *parent = existing->parent;
-		parent->remfrdir(existing);
-		if(std::ranges::any_of(parent->childs, [existing] (const ptr_entry &c) noexcept { return c.get() == existing; }))
-			return EIO;
-	}
-	// entry::rename() moves between directories only when the target has a
-	// directory part; "/name" means the root directory
-	const std::string target = (dir == sepdir ? std::string(sepdir) + sepdir : dir + sepdir) + name;
-	int res = e->rename(target.c_str());
-	if(res)
-		return res == EFAULT ? EIO : res;
-	return std::string(e->name) == name ? 0 : EIO;
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		if(!d->writable)
+			return EROFS;
+		entry *e = d->ctx->root->find(from.c_str());
+		if(e == nullptr)
+			return ENOENT;
+		if(e == d->ctx->root)
+			return EINVAL;
+		if(e->flags.lab)
+			return EPERM;
+		std::string dir, name;
+		if(!split(to, dir, name))
+			return EINVAL;
+		if(int res = validate_name(name))
+			return res;
+		entry *p = d->ctx->root->find(dir.c_str());
+		if(p == nullptr)
+			return ENOENT;
+		if(!p->flags.dir)
+			return ENOTDIR;
+		for(entry *a = p; a != nullptr && a != d->ctx->root; a = a->parent) {
+			if(a == e)
+				return EINVAL;		// into itself
+		}
+		if(entry *existing = child(p, name, true); existing != nullptr && existing != e) {
+			if(!replace || existing->flags.dir || e->flags.dir || existing->flags.lab)
+				return EEXIST;
+			entry *parent = existing->parent;
+			parent->remfrdir(existing);
+			if(std::ranges::any_of(parent->childs, [existing] (const ptr_entry &c) noexcept { return c.get() == existing; }))
+				return EIO;
+		}
+		const std::string target = (dir == sepdir ? std::string() : dir) + sepdir + name;
+		int res = e->rename(target.c_str());
+		if(res)
+			return res == EFAULT ? EIO : res;
+		return std::string(e->name) == name ? 0 : EIO;
+	});
 }
 
 int									volume::		remove(const std::string &path) {
-	session s(d->sink, d->ctx.get());
-	if(!d->writable)
-		return EROFS;
-	entry *e = d->ctx->root->find(path.c_str());
-	if(e == nullptr)
-		return ENOENT;
-	if(e == d->ctx->root)
-		return EINVAL;
-	if(has_label_entry(e))
-		return EPERM;		// the volume label file; entry::remfrdir() refuses it
-	entry *parent = e->parent;
-	parent->remfrdir(e);
-	if(std::ranges::any_of(parent->childs, [e] (const ptr_entry &c) noexcept { return c.get() == e; }))
-		return EIO;
-	return 0;
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		if(!d->writable)
+			return EROFS;
+		entry *e = d->ctx->root->find(path.c_str());
+		if(e == nullptr)
+			return ENOENT;
+		if(e == d->ctx->root)
+			return EINVAL;
+		if(has_label_entry(e))
+			return EPERM;		// the volume label file; entry::remfrdir() refuses it
+		entry *parent = e->parent;
+		parent->remfrdir(e);
+		if(std::ranges::any_of(parent->childs, [e] (const ptr_entry &c) noexcept { return c.get() == e; }))
+			return EIO;
+		return 0;
+	});
 }
 
 int									volume::		set_label(const std::string &label) {
-	session s(d->sink, d->ctx.get());
-	if(!d->writable)
-		return EROFS;
-	if(label.size() > name_size)
-		return ENAMETOOLONG;
-	if(!std::ranges::all_of(label, [] (char c) noexcept { return c >= ' ' && c <= '~'; }))
-		return EINVAL;
-	return actions::write_label(label);
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		if(!d->writable)
+			return EROFS;
+		if(label.size() > name_size)
+			return ENAMETOOLONG;
+		if(!std::ranges::all_of(label, [] (char c) noexcept { return c >= ' ' && c <= '~'; }))
+			return EINVAL;
+		return actions::write_label(label);
+	});
 }
 
 int									volume::		flush() {
-	session s(d->sink, d->ctx.get());
-	return d->ctx->dev.sync();
+	return guarded([&] () -> int {
+		session s(d->sink, d->ctx.get());
+		return d->ctx->dev.sync();
+	});
 }
 
 // --- tools ------------------------------------------------------------------
@@ -566,15 +603,17 @@ int									format(std::shared_ptr<io_backend> device, const location &where,
 	line_sink lines(std::move(sink));
 	const console::sink_t cs = lines.sink();
 	session s(cs, nullptr);
-	fatx_context ctx(m);
-	int res = ctx.setup();
-	if(res == 0)
-		res = actions::make_filesystem();
-	if(res == 0)
-		res = actions::write_label(label.empty() ? std::string(def_label) : label);
-	if(int r = ctx.dev.sync(); res == 0)
-		res = r;
-	return res;
+	return guarded([&] () -> int {
+		fatx_context ctx(m);
+		int res = ctx.setup();
+		if(res == 0)
+			res = actions::make_filesystem();
+		if(res == 0)
+			res = actions::write_label(label.empty() ? std::string(def_label) : label);
+		if(int r = ctx.dev.sync(); res == 0)
+			res = r;
+		return res;
+	});
 }
 
 int									check(std::shared_ptr<io_backend> device, const location &where,
@@ -593,19 +632,22 @@ int									check(std::shared_ptr<io_backend> device, const location &where,
 	line_sink lines(std::move(sink), [&report] (const std::string &l) { report.messages.push_back(l); });
 	const console::sink_t cs = lines.sink();
 	session s(cs, nullptr);
-	fatx_context ctx(m);
-	int res = ctx.setup();
-	if(res == 0 && ctx.root == nullptr)
-		res = EIO;
-	if(res == 0) {
-		ctx.root->analyse(entry::findfile);
-		ctx.fat->fatlost();
-		ctx.fat->fatcheck();
-	}
+	const int res = guarded([&] () -> int {
+		fatx_context ctx(m);
+		int r = ctx.setup();
+		if(r == 0 && ctx.root == nullptr)
+			r = EIO;
+		if(r == 0) {
+			ctx.root->analyse(entry::findfile);
+			ctx.fat->fatlost();
+			ctx.fat->fatcheck();
+		}
+		report.repaired = repair && ctx.dev.modified();
+		if(int sr = ctx.dev.sync(); r == 0)
+			r = sr;
+		return r;
+	});
 	report.problems = m.asked;
-	report.repaired = repair && ctx.dev.modified();
-	if(int r = ctx.dev.sync(); res == 0)
-		res = r;
 	lines.finish();
 	return res;
 }

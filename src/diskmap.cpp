@@ -40,6 +40,8 @@ void						dskmap::		forfat(const lbdfat_t &lbd) {
 		p += fatx_context::get()->par.clus_size
 	) {
 		byte_buffer buf = fatx_context::get()->dev.read_bytes(p, fatx_context::get()->par.clus_size);
+		if(buf.size() != fatx_context::get()->par.clus_size)
+			break;		// unreadable FAT (the error is reported by device)
 		for(
 			uint16_t i = static_cast<uint16_t>(p == fatx_context::get()->par.fat_start ? fatx_context::get()->par.root_clus : 0);
 			i < (fatx_context::get()->par.clus_size >> fatx_context::get()->par.chain_pow) && c < fatx_context::get()->par.clus_fat;
@@ -331,9 +333,10 @@ vareas						dskmap::		allocfat(clusptr s, clusptr o) {
 					gap_clus,
 					gap_clus + std::min<clusptr>(gap_size, tot_size) - 1
 				));
-				freegaps.right.erase(gap_clus);
+				freegaps.left.erase(gap_clus);	// by start cluster (right is by size)
 				if(tot_size < gap_size) {
-					freegaps.insert(gap_t::value_type(gap_clus + gap_size, tot_size - gap_size));
+					// the rest of the gap stays free
+					freegaps.insert(gap_t::value_type(gap_clus + tot_size, gap_size - tot_size));
 					tot_size = 0;
 				}
 				else
@@ -376,8 +379,10 @@ void						dskmap::		freefat(clusptr o) {
 		#endif
 		gap_t::left_map::iterator next = freegaps.left.upper_bound(i.start);
 		gap_t::left_map::iterator prev = next;
-		--prev;
-		if(next != freegaps.left.end() && prev->first + prev->second == i.start && i.stop + 1 == next->first) {
+		// the freed area may come before the first gap or after the last one
+		const bool join_prev = next != freegaps.left.begin() && (--prev, prev->first + prev->second == i.start);
+		const bool join_next = next != freegaps.left.end() && i.stop + 1 == next->first;
+		if(join_prev && join_next) {
 			// new gap is adjascent with previous and next gap
 			clusptr prev_clus = prev->first;
 			clusptr prev_size = prev->second;
@@ -386,14 +391,14 @@ void						dskmap::		freefat(clusptr o) {
 			freegaps.left.erase(next);
 			freegaps.insert(gap_t::value_type(prev_clus, prev_size + i.stop - i.start + 1 + next_size));
 		}
-		else if(next != freegaps.left.end() && prev->first + prev->second == i.start) {
+		else if(join_prev) {
 			// new gap is adjascent with a previous gap
 			clusptr prev_clus = prev->first;
 			clusptr prev_size = prev->second;
 			freegaps.left.erase(prev);
 			freegaps.insert(gap_t::value_type(prev_clus, prev_size + i.stop - i.start + 1));
 		}
-		else if(next != freegaps.left.end() && i.stop + 1 == next->first) {
+		else if(join_next) {
 			// new gap is adjascent with a next gap
 			clusptr next_size = next->second;
 			freegaps.left.erase(next);
@@ -419,7 +424,10 @@ int							dskmap::		resizefat(ptr_vareas o, clusptr s) {
 		freefat(o->first());
 		return 0;
 	}
-	bool res = true;
+	// the last area may have been cut to the size of the file: count it in
+	// whole clusters, as the areas added or removed below
+	o->back().size = (o->back().stop - o->back().start + 1) << fatx_context::get()->par.clus_pow;
+	int res = 0;
 	if(o->nbcls() < s) {
 		// we need to extend the chain
 		vareas &&extend = allocfat(s - o->nbcls(), o->last() + 1);
@@ -433,10 +441,11 @@ int							dskmap::		resizefat(ptr_vareas o, clusptr s) {
 	else if(o->nbcls() > s) {
 		// we need to reduce the chain
 		authm.lock();
+		const clusptr cut = o->at(s + 1);
 		res = write(o->at(s), EOC);
 		authm.unlock();
-		if(res)
-			freefat(o->at(s + 1));
+		if(!res)
+			freefat(cut);
 		authm.lock();
 		o->erase(o->in(s) + 1, o->end());
 		o->back().size -= (o->nbcls() - s) << fatx_context::get()->par.clus_pow;

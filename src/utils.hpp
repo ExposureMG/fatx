@@ -301,13 +301,21 @@ public:
 	static void						set_sink(sink_t);
 	static std::pair<bool, bool>	read();
 };
+// Without arguments the text is written as is: it may contain entry names,
+// and '{' and '}' are valid in FATX names.
 template <typename... Targs>
 void					console::	write(const std::string &s, Targs... args) {
-	emit(level::info, std::vformat(s, std::make_format_args(args...)));
+	if constexpr(sizeof...(Targs) == 0)
+		emit(level::info, s);
+	else
+		emit(level::info, std::vformat(s, std::make_format_args(args...)));
 }
 template <typename... Targs>
 void					console::	write(const std::string &s, bool err, Targs... args) {
-	emit(err ? level::error : level::info, std::vformat(s, std::make_format_args(args...)));
+	if constexpr(sizeof...(Targs) == 0)
+		emit(err ? level::error : level::info, s);
+	else
+		emit(err ? level::error : level::info, std::vformat(s, std::make_format_args(args...)));
 }
 
 // File name validation
@@ -329,7 +337,12 @@ inline void							dbglog(const std::string &, Targs...);
 #ifndef NDEBUG
 template <typename... Targs>
 inline void							dbglog(const std::string &s, Targs... args) {
-	std::istringstream flux(std::vformat(s, std::make_format_args(args...)));
+	std::string text;
+	if constexpr(sizeof...(Targs) == 0)
+		text = s;
+	else
+		text = std::vformat(s, std::make_format_args(args...));
+	std::istringstream flux(text);
 	for(std::string line; std::getline(flux, line);)
 		console::emit(console::level::debug, std::format("# {:016X} {}\n", std::hash<std::thread::id>{}(std::this_thread::get_id()), line));
 }

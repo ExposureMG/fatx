@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <cstdlib>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -423,4 +424,225 @@ TEST(Volume, ProbeLayouts) {
 		EXPECT_EQ(v->info().partition_offset, p.offset);
 		EXPECT_EQ(v->info().label, p.where.partition == "x2" ? "DATA" : "COMPAT");
 	}
+}
+
+// --- bugs found while embedding -----------------------------------------------
+
+TEST(Fixes, ReadEveryOffsetAndLength) {
+	// reads that start on the last byte of a cluster area
+	auto dev = formatted(16 << 20);
+	auto v = open_rw(dev);
+	const auto data = random_bytes(3 * 16384 + 1, 3);
+	ASSERT_EQ(v->create("/f", data.size()), 0);
+	ASSERT_EQ(v->write("/f", 0, data), 0);
+	const uint32_t cs = v->info().cluster_size;
+	v.reset();
+	v = open_rw(dev);		// cluster areas read back from the FAT
+	for(uint64_t off: { uint64_t(0), uint64_t(cs - 1), uint64_t(cs), data.size() - 1, data.size() - 2 }) {
+		for(size_t len: { size_t(1), size_t(2), size_t(cs), size_t(cs + 1) }) {
+			std::vector<std::byte> out(len, std::byte{0xAA});
+			size_t got = 0;
+			ASSERT_EQ(v->read("/f", off, out, &got), 0);
+			ASSERT_EQ(got, std::min<size_t>(len, data.size() - off)) << off << " " << len;
+			EXPECT_TRUE(std::equal(out.begin(), out.begin() + static_cast<long>(got), data.begin() + static_cast<long>(off))) << off << " " << len;
+		}
+	}
+}
+
+namespace {
+void expect_clean(const std::shared_ptr<fatx::io_backend> &dev) {
+	fatx::check_report report;
+	ASSERT_EQ(fatx::check(dev, {}, false, report), 0);
+	std::string all;
+	for(const auto &m: report.messages)
+		all += m + "\n";
+	EXPECT_EQ(report.problems, 0u) << all;
+}
+}
+
+TEST(Fixes, GrowWithinACluster) {
+	auto dev = formatted(16 << 20);
+	auto v = open_rw(dev);
+	const auto data = random_bytes(300, 1);
+	ASSERT_EQ(v->create("/f", 0), 0);
+	ASSERT_EQ(v->write("/f", 0, std::span(data).first(100)), 0);
+	ASSERT_EQ(v->write("/f", 100, std::span(data).subspan(100)), 0);	// same cluster count
+	EXPECT_EQ(read_all(*v, "/f"), data);
+	ASSERT_EQ(v->set_label("NEW LABEL"), 0);						// name.txt grows in its cluster
+	ASSERT_EQ(v->set_label("X"), 0);
+	v.reset();
+	v = open_rw(dev);
+	EXPECT_EQ(v->info().label, "X");
+	EXPECT_EQ(read_all(*v, "/f"), data);
+	v.reset();
+	expect_clean(dev);
+}
+
+TEST(Fixes, GrowFragmentedFromUnalignedSize) {
+	auto dev = formatted(16 << 20);
+	auto v = open_rw(dev);
+	const uint32_t cs = v->info().cluster_size;
+	const auto data = random_bytes(5 * cs + 123, 2);
+	ASSERT_EQ(v->create("/a", 100), 0);
+	ASSERT_EQ(v->write("/a", 0, std::span(data).first(100)), 0);
+	ASSERT_EQ(v->create("/b", cs), 0);			// right after /a: /a can't grow in place
+	ASSERT_EQ(v->write("/a", 100, std::span(data).subspan(100, 2 * cs)), 0);
+	ASSERT_EQ(v->write("/a", 100 + 2 * cs, std::span(data).subspan(100 + 2 * cs)), 0);
+	EXPECT_EQ(read_all(*v, "/a"), data);
+	v.reset();
+	v = open_rw(dev);
+	EXPECT_EQ(read_all(*v, "/a"), data);
+	v.reset();
+	expect_clean(dev);
+}
+
+TEST(Fixes, ShrinkFreesClusters) {
+	auto dev = formatted(16 << 20);
+	auto v = open_rw(dev);
+	const uint32_t cs = v->info().cluster_size;
+	const auto data = random_bytes(10 * cs, 3);
+	ASSERT_EQ(v->create("/f", data.size()), 0);
+	ASSERT_EQ(v->write("/f", 0, data), 0);
+	const uint64_t before = v->info().free_clusters;
+	ASSERT_EQ(v->truncate("/f", cs + 5), 0);
+	EXPECT_EQ(v->info().free_clusters, before + 8);
+	EXPECT_EQ(read_all(*v, "/f"), std::vector<std::byte>(data.begin(), data.begin() + cs + 5));
+	ASSERT_EQ(v->truncate("/f", 0), 0);
+	EXPECT_EQ(v->info().free_clusters, before + 10);
+	v.reset();
+	expect_clean(dev);
+}
+
+TEST(Fixes, AllocateFromALargerMiddleGap) {
+	auto dev = formatted(8 << 20);
+	auto v = open_rw(dev);
+	const uint64_t cs = v->info().cluster_size;
+	const uint64_t free = v->info().free_clusters;
+	ASSERT_GT(free, 100u);
+	auto fill = [&] (const std::string &p, uint64_t clusters, unsigned seed) {
+		const auto d = random_bytes(clusters * cs, seed);
+		ASSERT_EQ(v->create(p, d.size()), 0) << p;
+		ASSERT_EQ(v->write(p, 0, d), 0) << p;
+	};
+	fill("/a", 10, 1);
+	fill("/b", 40, 2);
+	fill("/c", free - 10 - 40 - 5, 3);		// leaves a last gap of 5 clusters
+	ASSERT_EQ(v->remove("/b"), 0);			// a 40-cluster gap in the middle
+	fill("/d", 20, 4);						// no exact fit, last gap too small
+	fill("/e", 15, 5);
+	fill("/f", 5, 6);
+	v.reset();
+	v = open_rw(dev);
+	EXPECT_EQ(read_all(*v, "/a"), random_bytes(10 * cs, 1));
+	EXPECT_EQ(read_all(*v, "/c"), random_bytes((free - 55) * cs, 3));
+	EXPECT_EQ(read_all(*v, "/d"), random_bytes(20 * cs, 4));
+	EXPECT_EQ(read_all(*v, "/e"), random_bytes(15 * cs, 5));
+	EXPECT_EQ(read_all(*v, "/f"), random_bytes(5 * cs, 6));
+	EXPECT_EQ(v->create("/g", 6 * cs), ENOSPC);	// 5 clusters left
+	EXPECT_EQ(v->create("/g", 5 * cs), 0);
+	EXPECT_EQ(v->info().free_clusters, 0u);
+	EXPECT_EQ(v->create("/h", 1), ENOSPC);
+	v.reset();
+	expect_clean(dev);
+}
+
+TEST(Fixes, MoveToRoot) {
+	auto dev = formatted(16 << 20);
+	auto v = open_rw(dev);
+	ASSERT_EQ(v->mkdir("/d"), 0);
+	ASSERT_EQ(v->mkdir("/d/e"), 0);
+	ASSERT_EQ(v->create("/d/e/f", 10), 0);
+	ASSERT_EQ(v->rename("/d/e", "/e"), 0);
+	fatx::entry_info st;
+	EXPECT_EQ(v->stat("/e/f", st), 0);
+	EXPECT_EQ(v->stat("/d/e", st), ENOENT);
+	v.reset();
+	expect_clean(dev);
+}
+
+// Hostile or damaged images must give errors, not crashes or hangs.
+TEST(Fixes, CorruptedImages) {
+	auto pristine = formatted(4 << 20);
+	{
+		auto v = open_rw(pristine);
+		ASSERT_EQ(v->mkdir("/dir"), 0);
+		ASSERT_EQ(v->mkdir("/dir/sub"), 0);
+		for(int i = 0; i < 12; i++) {
+			const auto d = random_bytes(static_cast<size_t>(i) * 3000 + 1, static_cast<unsigned>(i));
+			const std::string p = (i % 2 ? "/dir/f" : "/dir/sub/g") + std::to_string(i);
+			ASSERT_EQ(v->create(p, d.size()), 0);
+			ASSERT_EQ(v->write(p, 0, d), 0);
+		}
+	}
+	int err = 0;
+	const auto info = fatx::volume::open(pristine, {}, false, {}, &err)->info();
+	const uint64_t metadata_end = info.data_offset + 8 * info.cluster_size;
+	// FATX_FUZZ_ROUNDS / FATX_FUZZ_SEED run a longer campaign
+	const char *rounds_env = std::getenv("FATX_FUZZ_ROUNDS");
+	const char *seed_env = std::getenv("FATX_FUZZ_SEED");
+	const int rounds = rounds_env ? std::atoi(rounds_env) : 300;
+	std::mt19937_64 gen(seed_env ? std::strtoull(seed_env, nullptr, 10) : 1234);
+	std::function<void(fatx::volume &, const std::string &, int)> walk = [&walk] (fatx::volume &v, const std::string &dir, int depth) {
+		std::vector<fatx::entry_info> l;
+		if(depth > 8 || v.list(dir, l))
+			return;
+		for(const auto &e: l) {
+			const std::string p = (dir == "/" ? "" : dir) + "/" + e.name;
+			if(e.directory)
+				walk(v, p, depth + 1);
+			else {
+				std::vector<std::byte> b(std::min<uint64_t>(e.size, 1 << 20));
+				size_t got = 0;
+				void(v.read(p, 0, b, &got));
+				if(e.size > 10)
+					void(v.read(p, e.size - 1, b, &got));
+			}
+		}
+	};
+	for(int round = 0; round < rounds; round++) {
+		auto dev = std::make_shared<fatx::memory_io>(0);
+		dev->data() = pristine->data();
+		if(round % 10 == 9) {
+			dev->data().resize(gen() % pristine->size());	// truncated image
+		}
+		else {
+			const int flips = 1 + static_cast<int>(gen() % 16);
+			for(int i = 0; i < flips; i++) {
+				// mostly in the boot sector, FAT and first directory clusters
+				const uint64_t at = (gen() % 4 == 0) ? gen() % 512 : gen() % metadata_end;
+				dev->data()[at] = static_cast<std::byte>(gen() & 0xFF);
+			}
+		}
+		auto v = fatx::volume::open(dev, {}, false, {}, &err);
+		if(v) {
+			void(v->info());
+			walk(*v, "/", 0);
+		}
+		v.reset();
+		fatx::check_report report;
+		void(fatx::check(dev, {}, false, report));
+		v = fatx::volume::open(dev, {}, true, {}, &err);
+		if(v) {
+			void(v->mkdir("/new"));
+			void(v->create("/dir/new", 5000));
+			void(v->remove("/dir/f1"));
+			void(v->rename("/dir/f3", "/f3"));
+		}
+	}
+}
+
+TEST(Fixes, BracesInNames) {
+	// '{' and '}' are valid in names and must not be read as format strings
+	auto dev = formatted(16 << 20);
+	{
+		auto v = open_rw(dev);
+		ASSERT_EQ(v->mkdir("/{x}"), 0);
+		ASSERT_EQ(v->create("/{x}/a}b{", 3), 0);
+	}
+	auto v = open_rw(dev);
+	fatx::entry_info st;
+	EXPECT_EQ(v->stat("/{x}/a}b{", st), 0);
+	ASSERT_EQ(v->rename("/{x}/a}b{", "/{}"), 0);
+	v.reset();
+	expect_clean(dev);
 }

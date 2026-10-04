@@ -224,6 +224,10 @@ void						entry::			opendir() {
 	std::vector<ptr_entry> bad;
 	for(clusptr clus_curr = cluster; clus_curr != EOC && clus_curr != FLK && !(mark != 0 && !fatx_context::get()->mmi.recover); clus_curr = fatx_context::get()->fat->read(clus_curr)) {
 		std::string buf = bytes_to_raw(fatx_context::get()->dev.read_bytes(clsarithm::cls2ptr(clus_curr), fatx_context::get()->par.clus_size));
+		if(buf.size() != fatx_context::get()->par.clus_size) {
+			console::write("Unreadable cluster in directory {}.\n", true, path());
+			break;
+		}
 		for(size_t i = 0; i < fatx_context::get()->par.clus_size && !(mark != 0 && !fatx_context::get()->mmi.recover); i += ent_size) {
 			entry *ent = new entry(clsarithm::cls2ptr(clus_curr) + i, &buf[i]);
 			ent->parent = this;
@@ -379,6 +383,11 @@ int							entry::			addtodir(entry *e) {
 	streamptr del = 0;
 	for(clusptr i = cluster; endp == 0 && i != EOC && i != FLK; i = fatx_context::get()->fat->read(i)) {
 		byte_buffer buf = fatx_context::get()->dev.read_bytes(clsarithm::cls2ptr(i), fatx_context::get()->par.clus_size);
+		if(buf.size() != fatx_context::get()->par.clus_size) {
+			mux_D.unlock();
+			mux_E.unlock();
+			return EIO;
+		}
 		for(size_t j = 0; j < fatx_context::get()->par.clus_size; j += ent_size) {
 			const auto first = static_cast<unsigned char>(buf[j]);
 			const auto second = static_cast<unsigned char>(buf[j + 1]);
@@ -390,7 +399,13 @@ int							entry::			addtodir(entry *e) {
 				del = clsarithm::cls2ptr(i) + j;
 		}
 	}
-	assert(endp != 0);
+	if(endp == 0) {
+		// no end of directory mark: the directory is damaged
+		console::write("Directory {} has no end mark, run fsck.fatx.\n", true, path());
+		mux_D.unlock();
+		mux_E.unlock();
+		return EIO;
+	}
 	// we search a deleted entry
 	if(del != 0) {
 		// we found one, and use it
@@ -546,6 +561,8 @@ int							entry::			rename(const char *n) {
 	if(std::string(n).rfind(sepdir, std::string(n).size()) != std::string::npos) {
 		nam = std::string(n).substr(std::string(n).rfind(sepdir, std::string(n).size()) + 1).data();
 		dir = std::string(n).substr(0, std::string(n).rfind(sepdir, std::string(n).size())).data();
+		if(dir.empty())
+			dir = sepdir;	// "/name" is in the root directory
 	}
 	else
 		nam = n;
@@ -578,7 +595,13 @@ int							entry::			rename(const char *n) {
 			oldpar->childs.erase(i);
 			oldpar->mux_E.unlock();
 			int res = 0;
-			if((res = write())) {
+			// the old record becomes a deleted empty file: as a deleted
+			// directory still pointing to clusters in use, it would be seen
+			// as invalid
+			entry gone("_none", 0);
+			gone.loc = loc;
+			gone.status = delwdata;
+			if((res = gone.write())) {
 				oldpar->mux_D.unlock();
 				mux_E.unlock();
 				return res;
@@ -988,6 +1011,8 @@ int							entry::			data(char *buf, bool r, filesize offset, filesize s) {
 		for(const area& i: areas->sub(s, offset)) {
 			if(r) {
 				byte_buffer raw = fatx_context::get()->dev.read_bytes(i.pointer, i.size);
+				if(raw.size() != i.size)
+					return EIO;
 				for(size_t idx = 0; idx < i.size; idx++)
 					buf[i.offset - offset + idx] = static_cast<char>(raw[idx]);
 			}
