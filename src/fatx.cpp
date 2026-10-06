@@ -174,7 +174,7 @@ int main(int argc, char *argv[]) {
 	if(mmi.prog == frontend::mkfs) {
 		console::write("Are you sure you want to erase all data in {} ?", mmi.input);
 		if((answ = mmi.getanswer(false))) {
-			void(fatx::actions::make_filesystem());
+			(void)fatx::actions::make_filesystem();
 			if(mmi.volname.empty())
 				mmi.volname = def_label;
 		}
